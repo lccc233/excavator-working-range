@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>挖掘机作业范围图生成器 · 反铲液压挖掘机作业尺寸在线计算</title>
+<meta name="description" content="在线调整动臂长度、斗杆长度、铲斗与铰点位置等几何参数，实时生成反铲液压挖掘机作业范围包络图，并计算最大挖掘半径、最大挖掘深度、最大挖掘高度、最大卸载高度、最大垂直挖掘深度等作业尺寸。">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Cpath d='M5 24h7l4-9 6-3' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20 12l5 2-2 5z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      挖掘机作业范围图生成器
+      <small>调整几何参数，实时生成反铲作业范围包络与作业尺寸</small>
+    </div>
+    <span class="spacer"></span>
+    <div class="actions">
+      <label class="no-print" style="font-size:12.5px;color:var(--text-2)">机型</label>
+      <select class="btn" id="presetSelect" title="选择机型预设"></select>
+      <button class="btn" id="btnReset" title="恢复到该机型的原始参数">重置</button>
+      <button class="btn" id="btnShare" title="复制当前参数的分享链接">复制链接</button>
+      <button class="btn" id="btnPng" title="导出高分辨率 PNG">导出 PNG</button>
+      <button class="btn" id="btnSvg" title="导出矢量 SVG">导出 SVG</button>
+      <button class="btn primary" id="btnPdf" title="调用浏览器打印，可另存为 PDF">打印 / PDF</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="panel" id="panel" aria-label="参数面板"></aside>
+
+    <section class="canvas-wrap">
+      <div class="canvas-toolbar no-print">
+        <span class="tabs" style="display:inline-flex;gap:6px">
+          <button class="btn" id="tabChart" data-tab="chart">作业范围图</button>
+          <button class="btn" id="tabTable" data-tab="table">参数表</button>
+        </span>
+        <span style="width:1px;height:18px;background:var(--border)"></span>
+        <span class="tabs" style="display:inline-flex;gap:6px">
+          <button class="btn primary" id="btnOutline" title="按真机外形绘制（默认）">实体外形</button>
+          <button class="btn" id="btnSchematic" title="按 GB/T 4460 机构运动简图符号绘制：构件画成杆件、铰点画成圆圈、油缸画成移动副">机构运动简图</button>
+        </span>
+        <span style="width:1px;height:18px;background:var(--border)"></span>
+        <label><input type="checkbox" id="optEnvelope" checked> 包络线</label>
+        <label><input type="checkbox" id="optDims" checked> 尺寸标注</label>
+        <label><input type="checkbox" id="optBody" checked> 整机外形</label>
+        <label><input type="checkbox" id="optTail" checked> 尾部回转圆</label>
+        <label>姿态
+          <select id="poseSelect">
+            <option value="custom">工作姿态（可调）</option>
+            <option value="maxDigHeight">最大挖掘高度</option>
+            <option value="dumpHeight">最大卸载高度</option>
+            <option value="maxDigDepth">最大挖掘深度</option>
+            <option value="verticalWallDepth">最大垂直挖掘深度</option>
+            <option value="groundMaxRadius">停机面最大挖掘半径</option>
+            <option value="none">不显示</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="chart-hold">
+        <div class="chart" id="chart"></div>
+
+        <!-- 工作姿态（可调）：直接调三个油缸的长度，范围 = 安装距 ~ 安装距+行程 -->
+        <div class="pose-ctl no-print" id="poseCtl" hidden>
+          <div class="pose-ctl-title">油缸长度（工作姿态可调）</div>
+          <div class="pose-row">
+            <span class="pose-name">动臂油缸</span>
+            <input type="range" id="slBoom" aria-label="动臂油缸长度">
+            <span class="pose-val" id="valBoom">—</span>
+          </div>
+          <div class="pose-row">
+            <span class="pose-name">斗杆油缸</span>
+            <input type="range" id="slArm" aria-label="斗杆油缸长度">
+            <span class="pose-val" id="valArm">—</span>
+          </div>
+          <div class="pose-row">
+            <span class="pose-name">铲斗油缸</span>
+            <input type="range" id="slBkt" aria-label="铲斗油缸长度">
+            <span class="pose-val" id="valBkt">—</span>
+          </div>
+          <div class="pose-hint" id="poseHint">范围：安装距 ~ 安装距 + 行程</div>
+          <button class="btn pose-reset" id="btnPoseReset" title="回到默认工作姿态">恢复默认姿态</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="tableWrap" hidden></div>
+      <div class="perf" id="perf"></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- 打印第二轮：参数表（屏幕上隐藏） -->
+<div class="print-only" id="printOnly"></div>
+
+<noscript>
+  <p style="padding:24px;font-size:14px">本工具需要启用 JavaScript 才能实时计算并绘制作业范围图。</p>
+</noscript>
+
+<script type="module" src="assets/ui/app.js"></script>
+</body>
+</html>

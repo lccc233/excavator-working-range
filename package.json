@@ -1,0 +1,28 @@
+{
+  "name": "excavator-working-range",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "反铲液压挖掘机作业范围图在线生成器（零依赖纯静态）",
+  "keywords": [
+    "excavator",
+    "working-range",
+    "envelope",
+    "kinematics",
+    "hydraulic",
+    "canvas",
+    "svg",
+    "zero-dependency"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "serve": "node tools/serve.mjs",
+    "test": "node tools/test.mjs",
+    "calibrate": "node tools/calibrate.mjs",
+    "docs:params": "node tools/gen-param-table.mjs",
+    "verify:deploy": "node tools/verify-deploy.mjs"
+  }
+}

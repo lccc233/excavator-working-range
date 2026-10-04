@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>自检 · 挖掘机作业范围图生成器</title>
+<style>
+  body { font: 13px/1.6 Consolas, "Microsoft YaHei", monospace; margin: 0; padding: 12px 16px; background: #0f172a; color: #e2e8f0; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  .row { padding: 2px 0; white-space: pre-wrap; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; font-weight: 700; }
+  .info { color: #94a3b8; }
+  #summary { font-size: 16px; font-weight: 700; padding: 8px 0 12px; }
+  #stage { position: absolute; left: -4000px; top: 0; width: 1000px; height: 700px; }
+</style>
+</head>
+<body>
+<h1>浏览器端自检 —— 挖掘机作业范围图生成器</h1>
+<div id="summary">运行中…</div>
+<div id="out"></div>
+<div id="stage"></div>
+
+<script type="module">
+import { PRESETS, clonePreset, getPreset } from '../assets/core/presets.js';
+import { computeMetrics, METRIC_KEYS } from '../assets/core/metrics.js';
+import { computeEnvelope, computeMinSwingRadius, envelopeExtremes } from '../assets/core/envelope.js';
+import { validateParams, PARAM_SPEC } from '../assets/core/params.js';
+import { armCylLength, armDeltaFromLength, armRodPerpInBoom, armRodPerpSpan, bucketCylLength, resolveJointRanges, boomCylBodyPoint, boomCylLength, cylinderPose, verifyCylinderLayout } from '../assets/core/cylinders.js';
+import { encodeParams, decodeParams, buildShareUrl, matchPreset } from '../assets/core/share.js';
+import { renderChart, resolvePose, cylinderLengthRange } from '../assets/ui/draw.js';
+import { renderSchematicFigure, schematicModel } from '../assets/ui/schematic.js';
+import { renderSpecTables } from '../assets/ui/chart-table.js';
+import { exportPng, exportSvg, serializeSvg, svgToCanvas, copyText, safeFilename } from '../assets/ui/exporter.js';
+
+const out = document.getElementById('out');
+const summary = document.getElementById('summary');
+let pass = 0, fail = 0;
+const failures = [];
+
+function check(name, cond, detail = '') {
+  const ok = !!cond;
+  ok ? pass++ : fail++;
+  if (!ok) failures.push(`${name}${detail ? ' [' + detail + ']' : ''}`);
+  const div = document.createElement('div');
+  div.className = 'row ' + (ok ? 'ok' : 'bad');
+  div.textContent = `${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '   ' + detail : ''}`;
+  out.appendChild(div);
+  return ok;
+}
+function info(msg) {
+  const div = document.createElement('div');
+  div.className = 'row info';
+  div.textContent = '      ' + msg;
+  out.appendChild(div);
+}
+function section(t) {
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.style.cssText = 'color:#60a5fa;font-weight:700;padding-top:8px';
+  div.textContent = '── ' + t;
+  out.appendChild(div);
+}
+
+const stage = document.getElementById('stage');
+
+async function main() {
+  /* ---------------- 1. 指标与标定 ---------------- */
+  section('指标计算');
+  for (const m of PRESETS) {
+    const v = validateParams(m);
+    check(`${m.id} 参数校验通过`, v.ok, v.errors.join(';'));
+    const { values } = computeMetrics(m);
+    const all = { ...values, minSwingRadius: computeMinSwingRadius(m) };
+    let worst = 0, worstKey = '';
+    for (const [k, nom] of Object.entries(m.nominal ?? {})) {
+      const d = Math.abs((all[k] - nom) / nom);
+      if (d > worst) { worst = d; worstKey = k; }
+    }
+    check(
+      `${m.id} 全部标称项偏差 ≤ 1%`,
+      worst <= 0.01,
+      `最大 ${(worst * 100).toFixed(3)}% (${worstKey})`,
+    );
+  }
+
+  const sy = getPreset('x20t');
+  const { values, poses } = computeMetrics(sy);
+  check('20 吨级机型 停机面最大挖掘半径 = 9950', Math.abs(values.groundMaxRadius - 9950) < 50, values.groundMaxRadius.toFixed(0));
+  check('20 吨级机型 最大挖掘深度 = 6600', Math.abs(values.maxDigDepth - 6600) < 33, values.maxDigDepth.toFixed(0));
+  check('20 吨级机型 最大挖掘高度 = 9570', Math.abs(values.maxDigHeight - 9570) < 48, values.maxDigHeight.toFixed(0));
+  check('20 吨级机型 最大卸载高度 = 6700', Math.abs(values.dumpHeight - 6700) < 34, values.dumpHeight.toFixed(0));
+  check('20 吨级机型 最大垂直挖掘深度 = 5800', Math.abs(values.verticalWallDepth - 5800) < 29, values.verticalWallDepth.toFixed(0));
+
+  /* ---------------- 2. 包络 ---------------- */
+  section('包络求解（八段圆弧作图法）');
+  const env = computeEnvelope(sy);
+  const ex = envelopeExtremes(env);
+  check('包络闭合', env.closed === true, env.closed ? '首尾相接' : '未闭合');
+  check('八段圆弧依次相接', env.segments.length === 8 && env.segments.every((s, i) => i === 0 || s.ptFrom === env.segments[i - 1].ptTo + 1), `${env.segments.length} 段`);
+  check('包络点数合理', env.outer.length > 40 && env.outer.length < 2000, `${env.outer.length} 点`);
+  check('包络极值 = 最大挖掘高度 (2mm)', Math.abs(ex.maxY - values.maxDigHeight) < 2, `Δ=${(ex.maxY - values.maxDigHeight).toFixed(2)} mm`);
+  check('包络极值 = 最大挖掘深度 (2mm)', Math.abs(ex.maxDepth - values.maxDigDepth) < 2, `Δ=${(ex.maxDepth - values.maxDigDepth).toFixed(2)} mm`);
+  check('包络极值 = 最大挖掘半径 (2mm)', Math.abs(ex.maxX - values.maxDigRadius) < 2, `Δ=${(ex.maxX - values.maxDigRadius).toFixed(2)} mm`);
+  {
+    // ① 末 A–C–T 共线、④ 末 A–T–C 共线：用两段端点算出的齿尖半径核对
+    const rr = resolveJointRanges(sy);
+    const AA = { x: sy.pivotX, y: sy.pivotY };
+    const poseOf = (alpha, delta, psi) => {
+      const a = alpha * Math.PI / 180, g = (alpha + delta) * Math.PI / 180, t = (alpha + delta + psi) * Math.PI / 180;
+      const B = { x: AA.x + sy.boomLength * Math.cos(a), y: AA.y + sy.boomLength * Math.sin(a) };
+      const C = { x: B.x + sy.armLength * Math.cos(g), y: B.y + sy.armLength * Math.sin(g) };
+      return { C, T: { x: C.x + sy.bucketRadius * Math.cos(t), y: C.y + sy.bucketRadius * Math.sin(t) } };
+    };
+    const d1 = (() => { const q = poseOf(rr.alphaMax, rr.deltaMax, env.segments[0].to); return Math.hypot(q.T.x - AA.x, q.T.y - AA.y) - (Math.hypot(q.C.x - AA.x, q.C.y - AA.y) + sy.bucketRadius); })();
+    const d4 = (() => { const q = poseOf(rr.alphaMin, rr.deltaMin, env.segments[3].to); return Math.hypot(q.T.x - AA.x, q.T.y - AA.y) - Math.abs(Math.hypot(q.C.x - AA.x, q.C.y - AA.y) - sy.bucketRadius); })();
+    check('① 末 A–C–T 共线', Math.abs(d1) < 1, `Δ=${d1.toFixed(2)} mm`);
+    check('④ 末 A–T–C 共线', Math.abs(d4) < 1, `Δ=${d4.toFixed(2)} mm`);
+  }
+  check('动臂油缸活塞杆端取负值（在动臂两端点连线另一侧）', sy.boomCylRodPerp < 0, `${sy.boomCylRodPerp} mm`);
+  {
+    // 斗杆油缸活塞杆端必须全程落在动臂两端点连线 A–B 上方——这一条同时定出
+    // 斗杆反解取圆交点的哪一支（见 cylinders.js 的 armBranchInfo）
+    const sp = armRodPerpSpan(sy);
+    check('斗杆油缸活塞杆端全程在动臂两端点连线 A–B 上方', sp.above,
+      `行程内 ${sp.min.toFixed(0)} ~ ${sp.max.toFixed(0)} mm`);
+    const rr2 = resolveJointRanges(sy);
+    let allUp = true;
+    for (let i = 0; i <= 100; i++) {
+      const d = rr2.deltaMin + ((rr2.deltaMax - rr2.deltaMin) * i) / 100;
+      if (!(armRodPerpInBoom(sy, d) > 0)) allUp = false;
+    }
+    check('斗杆全行程姿态下杆端都在连线上方', allUp, `Δ∈[${rr2.deltaMin.toFixed(1)}, ${rr2.deltaMax.toFixed(1)}]°`);
+  }
+
+  const t0 = performance.now();
+  for (let i = 0; i < 5; i++) computeEnvelope(sy);
+  const envMs = (performance.now() - t0) / 5;
+  check('包络计算 < 30 ms（浏览器实测）', envMs < 30, `${envMs.toFixed(1)} ms`);
+
+  const t1 = performance.now();
+  for (let i = 0; i < 20; i++) computeMinSwingRadius(sy);
+  const swMs = (performance.now() - t1) / 20;
+  check('最小回转半径计算 < 30 ms', swMs < 30, `${swMs.toFixed(1)} ms`);
+
+  /* ---------------- 3. 绘图 ---------------- */
+  section('SVG 绘制');
+  const host = document.createElement('div');
+  host.style.cssText = 'width:1000px;height:700px';
+  stage.appendChild(host);
+  const svgText = renderChart({
+    W: 1000, H: 700, p: sy, values, poses, env, view: {
+      showEnvelope: true, showDims: true, showBody: true, showInner: true,
+      showTailCircle: true, poseMode: 'custom', customPose: {},
+      dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'],
+    }, minSwingRadius: values.minSwingRadius ?? computeMinSwingRadius(sy),
+  });
+  host.innerHTML = svgText;
+  const svgEl = host.querySelector('svg');
+  check('renderChart 产出 <svg> 元素', !!svgEl);
+  check('SVG 中不含 NaN/undefined/Infinity', !/NaN|undefined|Infinity/.test(svgText));
+  check('SVG 含包络路径', host.querySelectorAll('path').length >= 2, `${host.querySelectorAll('path').length} 条 path`);
+  check('SVG 含机体多边形', host.querySelectorAll('polygon').length >= 4, `${host.querySelectorAll('polygon').length} 个 polygon`);
+  const dimTexts = [...host.querySelectorAll('text')].map((t) => t.textContent).join('|');
+  const mm = (v) => Math.round(v).toLocaleString('en-US');
+  for (const [label, key] of [['最大挖掘高度', 'maxDigHeight'], ['最大卸载高度', 'dumpHeight'], ['最大挖掘深度', 'maxDigDepth'], ['最大垂直挖掘深度', 'verticalWallDepth'], ['停机面最大挖掘半径', 'groundMaxRadius']]) {
+    check(`图上标注「${label} ${mm(values[key])}」`, dimTexts.includes(label) && dimTexts.includes(mm(values[key])));
+  }
+  const bbox = svgEl.getBBox();
+  check('SVG 图形包围盒非空', bbox.width > 10 && bbox.height > 10, `${bbox.width.toFixed(0)}×${bbox.height.toFixed(0)}`);
+  check('图形未超出画布 (1000×700)', bbox.x > -60 && bbox.y > -60 && bbox.x + bbox.width < 1060 && bbox.y + bbox.height < 760,
+    `x∈[${bbox.x.toFixed(0)},${(bbox.x + bbox.width).toFixed(0)}] y∈[${bbox.y.toFixed(0)},${(bbox.y + bbox.height).toFixed(0)}]`);
+
+  /* ---------------- 4. 导出 ---------------- */
+  section('导出');
+  const serialized = serializeSvg(svgEl);
+  check('SVG 序列化含 xml 声明', serialized.startsWith('<?xml'));
+  check('SVG 序列化含命名空间', serialized.includes('xmlns="http://www.w3.org/2000/svg"'));
+  const reparsed = new DOMParser().parseFromString(serialized, 'image/svg+xml');
+  check('序列化后的 SVG 可被解析且无解析错误', !reparsed.querySelector('parsererror'));
+  check('序列化后仍含包络路径', reparsed.querySelectorAll('path').length >= 2, `${reparsed.querySelectorAll('path').length} 条`);
+
+  let canvasOk = false, pngNote = '';
+  try {
+    const canvas = await svgToCanvas(svgEl, 1);
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let nonWhite = 0;
+    for (let i = 0; i < data.length; i += 4 * 97) {
+      if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) nonWhite++;
+    }
+    canvasOk = nonWhite > 200;
+    pngNote = `${canvas.width}×${canvas.height}，非白像素采样 ${nonWhite}`;
+  } catch (e) {
+    pngNote = e.message;
+  }
+  check('SVG → Canvas 位图渲染成功（PNG 导出链路）', canvasOk, pngNote);
+
+  let svgDownloaded = false;
+  try {
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (b) => { svgDownloaded = b && b.size > 1000; return 'blob:stub'; };
+    const origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {};
+    exportSvg(svgEl, 'test.svg');
+    URL.createObjectURL = orig;
+    HTMLAnchorElement.prototype.click = origClick;
+  } catch (e) { pngNote = e.message; }
+  check('导出 SVG 触发下载且内容非空', svgDownloaded);
+
+  /* ---------------- 5. 工作姿态（可调）与安装点跟随 ---------------- */
+  section('工作姿态（可调）');
+  for (const m of PRESETS) {
+    const r = cylinderLengthRange(m, 'boom');
+    check(`${m.id} 动臂油缸量程 = 安装距 ~ 安装距+行程`,
+      Math.abs(r.min - m.boomCylClosed) < 1e-9 && Math.abs(r.max - (m.boomCylClosed + m.boomCylStroke)) < 1e-9,
+      `${r.min.toFixed(0)} ~ ${r.max.toFixed(0)} mm`);
+    const target = r.min + (r.max - r.min) * 0.62;
+    const pose = resolvePose(m, { poseMode: 'custom', customPose: { boomL: target } }, computeMetrics(m).poses);
+    const back = boomCylLength(m, pose.alphaDeg);
+    check(`${m.id} 给动臂缸长度 → 姿态 → 长度能往返`, Math.abs(back - target) < 1,
+      `${target.toFixed(0)} → α=${pose.alphaDeg.toFixed(2)}° → ${back.toFixed(0)} mm`);
+  }
+  {
+    const frameOf = (p) => {
+      const pose = computeMetrics(p).poses.maxDigHeight;
+      const c = cylinderPose(p, pose);
+      const t = (pose.alphaDeg * Math.PI) / 180;
+      const dx = c.arm.body.x - pose.B.x;
+      const dy = c.arm.body.y - pose.B.y;
+      return { along: dx * Math.cos(t) + dy * Math.sin(t), perp: -dx * Math.sin(t) + dy * Math.cos(t) };
+    };
+    const base = PRESETS[0];
+    const longer = { ...base, boomLength: base.boomLength + 900 };
+    const o1 = frameOf(base);
+    const o2 = frameOf(longer);
+    check('加长动臂后斗杆缸缸筒端「自 B」坐标不变（跟着末端销孔走）',
+      Math.abs(o1.along - o2.along) < 1e-6 && Math.abs(o1.perp - o2.perp) < 1e-6,
+      `(${o1.along.toFixed(0)}, ${o1.perp.toFixed(0)}) → (${o2.along.toFixed(0)}, ${o2.perp.toFixed(0)})`);
+    const frameOfArm = (p) => {
+      const pose = computeMetrics(p).poses.maxDigHeight;
+      const c = cylinderPose(p, pose);
+      const t = (pose.armAbsDeg * Math.PI) / 180;
+      const f = (q) => {
+        const dx = q.x - pose.C.x;
+        const dy = q.y - pose.C.y;
+        return { along: dx * Math.cos(t) + dy * Math.sin(t), perp: -dx * Math.sin(t) + dy * Math.cos(t) };
+      };
+      return { D: f(c.rocker.pivot), P5: f(c.bucket.body) };
+    };
+    const a1 = frameOfArm(base);
+    const a2 = frameOfArm({ ...base, armLength: base.armLength + 600 });
+    check('加长斗杆后铲斗缸缸筒端 / 摇杆铰点「自 C」坐标不变（跟着末端销孔走）',
+      Math.abs(a1.D.along - a2.D.along) < 1e-6 && Math.abs(a1.P5.along - a2.P5.along) < 1e-6,
+      `D ${a1.D.along.toFixed(0)} → ${a2.D.along.toFixed(0)}，缸筒端 ${a1.P5.along.toFixed(0)} → ${a2.P5.along.toFixed(0)}`);
+  }
+
+  /* ---------------- 6. 机构运动简图 ---------------- */
+  section('机构运动简图');
+  const schView = {
+    style: 'schematic',
+    showEnvelope: true, showDims: true, showBody: true, showInner: false,
+    showTailCircle: true, poseMode: 'custom', customPose: {},
+    dimKeys: ['groundMaxRadius', 'maxDigHeight'],
+  };
+  const schHost = document.createElement('div');
+  schHost.style.cssText = 'width:1000px;height:700px';
+  stage.appendChild(schHost);
+  const schText = renderChart({ W: 1000, H: 700, p: sy, values, poses, env, view: schView, minSwingRadius: computeMinSwingRadius(sy) });
+  schHost.innerHTML = schText;
+  const schSvg = schHost.querySelector('svg');
+  check('机构简图模式产出 <svg> 且序列化后可解析',
+    !!schSvg && !new DOMParser().parseFromString(serializeSvg(schSvg), 'image/svg+xml').querySelector('parsererror'));
+  const dev = schHost.querySelector('[data-layer="device"]');
+  const dcount = (sel) => (dev ? dev.querySelectorAll(sel).length : -1);
+  check('构件层：转动副 12 个（11 铰点，P 为复合铰链画两个圈）', dcount('[data-sym="pin"]') === 12, `${dcount('[data-sym="pin"]')} 个`);
+  check('构件层：机架支座 1 处（动臂根部 + 动臂油缸缸筒端 合为一个直角三角形）', dcount('[data-sym="frame"]') === 1, `${dcount('[data-sym="frame"]')} 处`);
+  const frPts = schHost.querySelector('[data-sym="frame"] polygon')?.getAttribute('points')?.trim().split(/\s+/).map((s) => s.split(',').map(Number)) ?? [];
+  check('机架三角形直角边平行坐标轴（图上实测）',
+    frPts.length === 3 &&
+    frPts.some((a, i) => frPts.some((b, j) => j !== i && Math.abs(a[0] - b[0]) < 0.01)) &&
+    frPts.some((a, i) => frPts.some((b, j) => j !== i && Math.abs(a[1] - b[1]) < 0.01)),
+    frPts.map((q) => `(${q[0].toFixed(0)},${q[1].toFixed(0)})`).join(' '));
+  const bkPts = schHost.querySelector('[data-sym="bucket"]')?.getAttribute('points')?.trim().split(/\s+/) ?? [];
+  check('铲斗是三个点的三角形（C / E / T）', bkPts.length === 3, `${bkPts.length} 个顶点`);
+  check('构件层：液压缸（移动副）3 处', dcount('[data-sym="cylinder"]') === 3, `${dcount('[data-sym="cylinder"]')} 处`);
+  check('构件层：摇杆 + 连杆 2 根两铰点杆', dcount('[data-sym="bar"]') === 2, `${dcount('[data-sym="bar"]')} 根`);
+  check('构件层：动臂 + 斗杆 2 个多边形构件', dcount('[data-sym="link"]') === 2, `${dcount('[data-sym="link"]')} 个`);
+  check('构件层：铲斗轮廓 1 个', dcount('[data-sym="bucket"]') === 1);
+  const jointTexts = [...schHost.querySelectorAll('[data-joint]')].map((t) => t.getAttribute('data-joint'));
+  check('图上标出 A/B/C/D/E/P 六个铰点编号', ['A', 'B', 'C', 'D', 'E', 'P'].every((k) => jointTexts.includes(k)), jointTexts.join(','));
+  const legendText = [...schHost.querySelectorAll('text')].find((t) => t.textContent === '机构运动简图符号');
+  const legendRect = legendText?.getBoundingClientRect();
+  const schSvgRect = schSvg.getBoundingClientRect();
+  check('图例确实画在画布内（不是只在字符串里）',
+    !!legendRect && legendRect.width > 40 && legendRect.height > 5 &&
+    legendRect.x > schSvgRect.x && legendRect.x + legendRect.width < schSvgRect.x + schSvgRect.width &&
+    legendRect.y > schSvgRect.y && legendRect.y + legendRect.height < schSvgRect.y + schSvgRect.height,
+    legendRect ? `图例 (${legendRect.x.toFixed(0)},${legendRect.y.toFixed(0)}) 画布 (${schSvgRect.x.toFixed(0)},${schSvgRect.y.toFixed(0)},${schSvgRect.width.toFixed(0)}×${schSvgRect.height.toFixed(0)})` : '未找到');
+
+  // 参数表小图：图例条必须落在机构下方，不能盖住铲斗（曾经盖住过）
+  const figPose = resolvePose(sy, { poseMode: 'custom', customPose: {} }, poses);
+  const figSvg = renderSchematicFigure({ p: sy, pose: figPose });
+  const figHost = document.createElement('div');
+  stage.appendChild(figHost);
+  figHost.innerHTML = figSvg;
+  const figEl = figHost.querySelector('svg');
+  check('参数表小图产出 <svg> 且良构',
+    !!figEl && !new DOMParser().parseFromString(serializeSvg(figEl), 'image/svg+xml').querySelector('parsererror'));
+  const drawRects = [...figHost.querySelectorAll('[data-layer="device"] [data-sym="pin"]')].map((c) => c.getBoundingClientRect().bottom);
+  const legendRow = figHost.querySelector('[data-layer="legend"]')?.getBoundingClientRect();
+  check('小图图例条在机构下方（不遮挡铲斗）',
+    !!legendRow && drawRects.length > 0 && legendRow.top >= Math.max(...drawRects) - 6,
+    legendRow ? `图例顶 ${legendRow.top.toFixed(0)} / 机构底 ${Math.max(...drawRects).toFixed(0)}` : '未找到图例');
+  const model = schematicModel(sy, figPose);
+  check('摇杆、连杆各只有两个铰点', model.links.find((l) => l.id === 'rocker').pts.length === 2 && model.links.find((l) => l.id === 'link').pts.length === 2);
+
+  /* ---------------- 7. 参数表 ---------------- */
+  section('参数表');
+  const tables = renderSpecTables(sy, { ...values, minSwingRadius: computeMinSwingRadius(sy) }, poses, { showNominal: true });
+  check('参数表含作业尺寸章节', tables.html.includes('作业尺寸'));
+  check('参数表含几何参数章节', tables.html.includes('几何参数'));
+  check('参数表含计算口径说明', tables.html.includes('计算口径'));
+  check('参数表无 NaN', !/NaN/.test(tables.html));
+  const tbl = document.createElement('div');
+  tbl.innerHTML = tables.html;
+  check('参数表渲染出行', tbl.querySelectorAll('tr').length > 30, `${tbl.querySelectorAll('tr').length} 行`);
+
+  /* ---------------- 8. 分享链接 ---------------- */
+  section('分享链接');
+  const modified = clonePreset('x20t');
+  modified.armLength = 2750;
+  const q = encodeParams(modified);
+  check('只写出改动项', q === 'm=x20t&al=2750', q);
+  const back = decodeParams(q);
+  check('往返后斗杆长度一致', back.armLength === 2750);
+  check('往返后机型一致', back.id === 'x20t');
+  check('未改动预设往返后仍能识别', matchPreset(decodeParams(encodeParams(clonePreset('x20t')))) === 'x20t');
+  const full = buildShareUrl(modified, 'https://example.com/');
+  check('分享链接可解析', decodeParams(full.slice(full.indexOf('?'))).armLength === 2750, full);
+
+  const url = new URL(location.href);
+  url.search = q;
+  check('URLSearchParams 能解析生成的查询串', new URLSearchParams(url.search).get('al') === '2750');
+
+  /* ---------------- 9. 交互一致性 ---------------- */
+  section('交互一致性');
+  const v1 = computeMetrics(sy).values;
+
+  // 铰点坐标换成新口径后，只放大 boomLength 会让安装点相对杆件错位、关节角范围跑掉；
+  // 「同型更大的机器」应当整套几何一起按比例放大，这里用整机缩放来验证单调性。
+  const k = 6500 / sy.boomLength;
+  const SCALE_KEYS = [
+    'boomLength', 'armLength', 'bucketRadius', 'pivotX', 'pivotY',
+    'boomCylBodyDX', 'boomCylBodyDY', 'boomCylRodAlong', 'boomCylRodPerp',
+    'armCylBodyAlong', 'armCylBodyPerp', 'armCylRodAlong', 'armCylRodPerp',
+    'bktCylBodyAlong', 'bktCylBodyPerp', 'bktBellAlong', 'bktBellPerp',
+    'bktRockerLen', 'bktEAlong', 'bktEPerp', 'bktLinkLen',
+    'boomCylClosed', 'boomCylStroke', 'armCylClosed', 'armCylStroke', 'bktCylClosed', 'bktCylStroke',
+    'trackLength', 'trackWidth', 'platformFront',
+  ];
+  const bigger = { ...sy };
+  for (const key of SCALE_KEYS) bigger[key] = sy[key] * k;
+  const v2 = computeMetrics(bigger).values;
+  const dR = v2.maxDigRadius - v1.maxDigRadius;
+  check('整机放大 → 最大挖掘半径显著增大', dR > 500, `+${dR.toFixed(0)} mm (${((dR / v1.maxDigRadius) * 100).toFixed(1)}%)`);
+  check('整机放大 → 最大挖掘高度增大', v2.maxDigHeight > v1.maxDigHeight, `${v1.maxDigHeight.toFixed(0)} → ${v2.maxDigHeight.toFixed(0)}`);
+
+  // 斗杆加长则要按原标定角度重配斗杆油缸，否则关节角范围会整个跑掉
+  const cal = sy.calibration;
+  const longer = { ...sy, armLength: sy.armLength + 700 };
+  const La = armCylLength(longer, cal.armRelMin);
+  const Lb = armCylLength(longer, cal.armRelMax);
+  longer.armCylClosed = Math.min(La, Lb);
+  longer.armCylStroke = Math.abs(Lb - La);
+  const v3 = computeMetrics(longer).values;
+  check('斗杆加长 700（重配油缸）→ 最大挖掘深度 +700', Math.abs((v3.maxDigDepth - v1.maxDigDepth) - 700) < 2, `+${(v3.maxDigDepth - v1.maxDigDepth).toFixed(0)}`);
+
+  /* ---------------- 10. 油缸布置口径与自检 ---------------- */
+  section('油缸布置口径');
+  for (const m of PRESETS) {
+    const layout = verifyCylinderLayout(m);
+    const bad = layout.checks.filter((c) => !c.ok);
+    check(`${m.id} 布置自检全部通过（含安裝点口径 / 伸出方向 / 干涉）`, bad.length === 0,
+      bad.map((c) => `${c.label}(${c.detail})`).join('；') || `${layout.checks.length} 项`);
+    check(`${m.id} 动臂油缸缸筒端在 A 前下方`, m.boomCylBodyDX > 0 && m.boomCylBodyDY < 0, `A+(${m.boomCylBodyDX}, ${m.boomCylBodyDY})`);
+    check(`${m.id} 斗杆油缸活塞杆端沿斗杆为负、垂直斗杆为正`, m.armCylRodAlong < 0 && m.armCylRodPerp > 0, `(${m.armCylRodAlong}, ${m.armCylRodPerp})`);
+    check(`${m.id} 铲斗油缸与摇杆都在斗杆上方`, m.bktCylBodyPerp > 0 && m.bktBellPerp > 0, `${m.bktCylBodyPerp} / ${m.bktBellPerp}`);
+    check(`${m.id} 摇杆/连杆长度在真机量级`,
+      m.bktRockerLen > 0.08 * m.armLength && m.bktRockerLen < 0.38 * m.armLength &&
+      m.bktLinkLen > 0.12 * m.armLength && m.bktLinkLen < 0.55 * m.armLength,
+      `摇杆 ${m.bktRockerLen} / 连杆 ${m.bktLinkLen}（斗杆 ${m.armLength}）`);
+    check(`${m.id} 连杆销落在斗背板上`,
+      m.bktEAlong < 0 && m.bktEAlong > -0.4 * m.bucketRadius &&
+      m.bktEPerp > 0.2 * m.bucketRadius && m.bktEPerp < 0.8 * m.bucketRadius,
+      `(${m.bktEAlong}, ${m.bktEPerp}) / R3=${m.bucketRadius}`);
+    const body = boomCylBodyPoint(m);
+    check(`${m.id} 缸筒端整机坐标 = A + (ΔX, ΔY)`,
+      Math.abs(body.x - (m.pivotX + m.boomCylBodyDX)) < 1e-9 && Math.abs(body.y - (m.pivotY + m.boomCylBodyDY)) < 1e-9,
+      `(${body.x.toFixed(0)}, ${body.y.toFixed(0)})`);
+    const R = resolveJointRanges(m);
+    check(`${m.id} 斗杆油缸伸出 → 收拢`, armCylLength(m, R.deltaMin) > armCylLength(m, R.deltaMax));
+    check(`${m.id} 铲斗油缸全缩 → 收斗`, bucketCylLength(m, R.psiCurl) < bucketCylLength(m, R.psiDump));
+  }
+
+  {
+    // 回归：改造前「逐缸长判支」在这组参数上会把杆端全程放到 A–B 连线下方
+    // （图上斗杆整支翻面）。现在按装配支一次定支，必须全程在上方且不跳支。
+    const p = {
+      ...sy, boomLength: 7300, armCylBodyAlong: -4325, armCylBodyPerp: 1180,
+      armCylRodAlong: -1525, armCylRodPerp: 225, armCylClosed: 3075, armCylStroke: 1400,
+    };
+    const Lc = Math.min(p.armCylClosed, p.armCylClosed + p.armCylStroke);
+    const Lo = Math.max(p.armCylClosed, p.armCylClosed + p.armCylStroke);
+    let ok = true, prev = null, dir = 0, folds = 0;
+    for (let i = 0; i <= 100; i++) {
+      const d = armDeltaFromLength(p, Lc + ((Lo - Lc) * i) / 100);
+      if (!Number.isFinite(d) || !(armRodPerpInBoom(p, d) > 0)) ok = false;
+      if (prev !== null) {
+        const s = Math.sign(d - prev);
+        if (s !== 0) { if (!dir) dir = s; else if (s !== dir) folds++; }
+      }
+      prev = d;
+    }
+    check('斗杆反解按装配支定支（回归：不得选到连线下方那支）', ok && folds === 0,
+      ok ? (folds === 0 ? '全程在上方且单调' : `中途跳支 ${folds} 次`) : '有采样点落在连线下方');
+  }
+
+  {
+    // 预设参数必须落在滑块区间内：区间收窄而预设没跟着改时，界面会把它夹到边界，
+    // 显示的就不是预设几何了（指标跟着漂）。同时钉住本次要求的垂直动臂区间。
+    const out = [];
+    for (const m of PRESETS) {
+      for (const spec of PARAM_SPEC) {
+        const v = m[spec.key];
+        if (v !== undefined && (v < spec.min || v > spec.max)) out.push(`${m.id}.${spec.key}=${v}∉[${spec.min},${spec.max}]`);
+      }
+    }
+    check('预设参数全部落在滑块区间内', out.length === 0, out.join('；') || `${PRESETS.length} 个机型`);
+    const rodSpec = PARAM_SPEC.find((s) => s.key === 'boomCylRodPerp');
+    check('活塞杆端 垂直动臂 区间为 −1000 ~ +1000', rodSpec.min === -1000 && rodSpec.max === 1000, `[${rodSpec.min}, ${rodSpec.max}]`);
+  }
+
+  check('参数表含铰点坐标对照表', tables.html.includes('铰点坐标对照'));
+  check('参数表含布置自检表', tables.html.includes('油缸布置自检'));
+  check('参数表标出杆端相对 A–B 连线的位置', tables.html.includes('相对 A–B 连线'));
+  check('参数表规格数量与 PARAM_SPEC 一致', PARAM_SPEC.length === 40, `${PARAM_SPEC.length} 项`);
+  check('指标键完整', METRIC_KEYS.length === 6);
+  check('safeFilename 生成安全文件名', !/[\\/:*?"<>|\s]/.test(safeFilename('某 20 吨级挖掘机/测试*', 'png')), safeFilename('某 20 吨级挖掘机/测试*', 'png'));
+
+  /* ---------------- 汇总 ---------------- */
+  summary.textContent = fail === 0
+    ? `✅ 全部通过：${pass} 项`
+    : `❌ ${fail} 项失败 / 共 ${pass + fail} 项 → ` + failures.join(' ⏐ ');
+  summary.className = fail === 0 ? 'ok' : 'bad';
+  document.title = (fail === 0 ? 'SELFTEST-OK ' : 'SELFTEST-FAIL ') + `${pass}/${pass + fail}`;
+  window.scrollTo(0, 0);
+}
+
+main().catch((e) => {
+  summary.textContent = '自检脚本异常：' + e.message;
+  summary.className = 'bad';
+  const d = document.createElement('div');
+  d.className = 'row bad';
+  d.textContent = e.stack;
+  out.appendChild(d);
+});
+</script>
+</body>
+</html>
