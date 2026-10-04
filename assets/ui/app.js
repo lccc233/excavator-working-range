@@ -16,6 +16,7 @@ import { computeMetrics } from '../core/metrics.js';
 import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js';
 import { decodeParams, encodeParams } from '../core/share.js';
 import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js';
+import { createChartZoom } from './zoom.js';
 import { renderSchematicFigure } from './schematic.js';
 import { createControls } from './controls.js';
 import { renderSpecTables, renderPrintHeader } from './chart-table.js';
@@ -25,6 +26,7 @@ const $ = (id) => document.getElementById(id);
 
 const el = {
   chart: $('chart'),
+  chartZoom: $('chartZoom'),
   tableWrap: $('tableWrap'),
   panel: $('panel'),
   perf: $('perf'),
@@ -34,6 +36,7 @@ const el = {
   poseSelect: $('poseSelect'),
   poseCtl: $('poseCtl'),
   poseHint: $('poseHint'),
+  zoomLevel: $('zoomLevel'),
 };
 
 /** 「工作姿态（可调）」里的三个油缸长度滑块 */
@@ -78,6 +81,7 @@ const state = {
 };
 
 let controls = null;
+let zoom = null;
 let rafId = 0;
 let tableTimer = 0;
 let urlTimer = 0;
@@ -128,16 +132,12 @@ function showNotices(check, extraWarnings = []) {
  * 绘制
  * ------------------------------------------------------------------ */
 
-function renderChartNow() {
-  const W = el.chart.clientWidth;
-  const H = el.chart.clientHeight;
-  if (W < 40 || H < 40) return;
-
-  // 当前姿态只解一次：绘图、参数表小图、油缸长度滑块都用它
-  state.pose = state.valid ? resolvePose(state.params, state.view, state.poses) : null;
-
-  const t0 = performance.now();
-  el.chart.innerHTML = renderChart({
+/**
+ * 生成指定画布尺寸的整幅 SVG 字符串（纯字符串，不碰 DOM）。
+ * 屏幕渲染与「离屏高分辨率导出」共用同一份入参装配，避免两处走偏。
+ */
+function chartSvg(W, H) {
+  return renderChart({
     W,
     H,
     p: state.params,
@@ -147,6 +147,20 @@ function renderChartNow() {
     view: state.view,
     minSwingRadius: state.values?.minSwingRadius,
   });
+}
+
+function renderChartNow() {
+  const W = el.chart.clientWidth;
+  const H = el.chart.clientHeight;
+  if (W < 40 || H < 40) return;
+
+  // 当前姿态只解一次：绘图、参数表小图、油缸长度滑块都用它
+  state.pose = state.valid ? resolvePose(state.params, state.view, state.poses) : null;
+
+  const t0 = performance.now();
+  el.chartZoom.innerHTML = chartSvg(W, H);
+  // 画布尺寸变了，旧位移可能落到合法区间外，重新钳制
+  zoom?.clampContent();
   state.renderMs = performance.now() - t0;
   syncPoseControls();
 
@@ -326,12 +340,33 @@ function currentSvg() {
   return el.chart.querySelector('svg');
 }
 
+/**
+ * 离屏渲染一张「够大」的图用于位图导出。
+ *
+ * 为什么要离屏：exporter 用 SVG 的 viewBox 决定位图尺寸，所以手机上直接导出
+ * 只能得到 ~780×920 的 PNG。这里按长边 ≥ minLongEdge 重渲染一次，
+ * 导出画质就与屏幕多大无关了；取景比例与屏幕上一致。
+ *
+ * 桌面（画布长边已 ≥1400）时 k = 1，输出与改动前完全相同。
+ * 缩放/平移**有意不参与**：导出的始终是完整未缩放的图。
+ */
+function exportSvgElement(minLongEdge = 1400) {
+  // 切到「参数表」页签时图被隐藏、clientWidth/Height 为 0，
+  // 此时回落到上一次渲染出的 viewBox，避免缩放系数算成 Infinity
+  const vb = currentSvg()?.viewBox?.baseVal;
+  const W = el.chart.clientWidth || vb?.width || 1200;
+  const H = el.chart.clientHeight || vb?.height || 800;
+  const k = Math.max(1, minLongEdge / Math.max(W, H));
+  const host = document.createElement('div');
+  host.innerHTML = chartSvg(Math.round(W * k), Math.round(H * k));
+  return host.querySelector('svg');
+}
+
 async function onExportPng() {
-  const svg = currentSvg();
-  if (!svg) return toast('图形尚未就绪');
+  if (!currentSvg()) return toast('图形尚未就绪');
   try {
     toast('正在生成 PNG…', 4000);
-    await exportPng(svg, safeFilename(state.params.name, 'png'), 2);
+    await exportPng(exportSvgElement(1400), safeFilename(state.params.name, 'png'), 2);
     toast('PNG 已导出');
   } catch (err) {
     toast(`导出失败：${err.message}`);
@@ -472,6 +507,28 @@ function initResize() {
   ro.observe(el.chart);
 }
 
+/* ------------------------------------------------------------------ *
+ * 图面缩放 / 平移（手机双指捏合、滚轮、双击、右下角按钮）
+ * ------------------------------------------------------------------ */
+
+function initZoom() {
+  const setDisabled = (id, off) => {
+    const b = $(id);
+    if (b) b.disabled = !!off;
+  };
+  const syncZoomUi = ({ k }) => {
+    if (el.zoomLevel) el.zoomLevel.textContent = `${k.toFixed(k < 10 ? 1 : 0).replace(/\.0$/, '')}×`;
+    setDisabled('zoomOut', k <= 1.0001);
+    setDisabled('zoomReset', k <= 1.0001);
+  };
+
+  zoom = createChartZoom({ host: el.chart, content: el.chartZoom, onChange: syncZoomUi });
+  $('zoomIn').addEventListener('click', () => zoom.zoomBy(1.4));
+  $('zoomOut').addEventListener('click', () => zoom.zoomBy(1 / 1.4));
+  $('zoomReset').addEventListener('click', () => zoom.reset());
+  syncZoomUi(zoom.getTransform());
+}
+
 function boot() {
   // 1) 决定初始参数：URL 里带参数才用 URL，否则载入默认预设（20 吨级机型）
   const query = typeof location !== 'undefined' ? location.search || location.hash : '';
@@ -492,6 +549,7 @@ function boot() {
   initTopbar();
   initViewControls();
   initResize();
+  initZoom();
   setTab('chart');
 
   // 4) 首次计算与绘制

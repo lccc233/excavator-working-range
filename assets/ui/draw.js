@@ -70,6 +70,61 @@ export function computeWorldBounds(p, env, extra = []) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 窄屏适配（纯函数，Node 里可单测）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 窄屏画布阈值（CSS px）。
+ *
+ * **为什么是这个数**：桌面端最窄的画布出现在 921px 视口（920px 断点之上），
+ * 此时画布宽 = 921 − --panel-w(344) = 577px。阈值取 560 < 577，
+ * 保证**桌面任何宽度都走宽屏分支、内边距与历史值逐字节一致**。
+ * 若把阈值调到 577 以上，桌面窗口从 985px 拖到 921px 时图会突然换一套内边距、肉眼可见地跳。
+ *
+ * 改 --panel-w 或 920px 断点时，tests/responsive.test.js 里的不变量断言会报警。
+ */
+export const NARROW_CANVAS_W = 560;
+
+/** 按画布宽度决定内边距：窄屏收紧四周留白，把像素让给图形 */
+export function chartPadding(W, showDims) {
+  const narrow = W < NARROW_CANVAS_W;
+  return narrow
+    ? { l: 26, t: 22, r: showDims ? 54 : 22, b: 34 }
+    : { l: 34, t: 30, r: showDims ? 96 : 34, b: 42 };
+}
+
+/**
+ * 粗略文本宽度（px）：CJK / 全角按 1em，其余按 0.55em。
+ * 只用于「会不会越界」的摆放判断，不追求与真实字形完全吻合——
+ * 精确值由 .verify/selftest.html 用真实 getBBox() 复核。
+ */
+export function estimateTextWidth(text, fontSize) {
+  let w = 0;
+  for (const ch of String(text)) {
+    w += (/[\u2e80-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? 1 : 0.55) * fontSize;
+  }
+  return w;
+}
+
+/**
+ * 纵向尺寸标注的文字摆放：默认在尺寸线右侧；右侧放不下就翻到左侧；
+ * 两侧都放不下就内收到画布内——**保证永不越界**（窄屏上 pad.r 收紧后必须靠这一步兜住）。
+ */
+export function placeDimLabel({ x, text, fontSize = 12, W, side = 'right', gap = 7 }) {
+  const tw = estimateTextWidth(text, fontSize);
+  const EDGE = 4;
+  if (side === 'right' && x + gap + tw > W - EDGE) {
+    if (x - gap - tw >= EDGE) return { tx: x - gap, anchor: 'end' };
+    return { tx: Math.max(EDGE, W - EDGE - tw), anchor: 'start', clamped: true };
+  }
+  if (side === 'left' && x - gap - tw < EDGE) {
+    if (x + gap + tw <= W - EDGE) return { tx: x + gap, anchor: 'start' };
+    return { tx: Math.max(EDGE, W - EDGE - tw), anchor: 'start', clamped: true };
+  }
+  return side === 'right' ? { tx: x + gap, anchor: 'start' } : { tx: x - gap, anchor: 'end' };
+}
+
+/* ------------------------------------------------------------------ *
  * 图形片段
  * ------------------------------------------------------------------ */
 
@@ -106,16 +161,23 @@ function dimH(T, x0, x1, y, color, label, sub) {
           font-family='${FONT}' fill="${color}" stroke="#ffffff" stroke-width="3" paint-order="stroke">${esc(text)}</text>`;
 }
 
-/** 纵向尺寸线：从 y0 到 y1 位于 x，带箭头与标签 */
-function dimV(T, x, y0, y1, color, label, sub, side = 'right') {
+/**
+ * 纵向尺寸线：从 y0 到 y1 位于 x，带箭头与标签。
+ *
+ * `W` 传画布宽度时，标签会先按 placeDimLabel 做「放不下就翻边 / 内收」的兜底，
+ * 窄屏收紧 pad.r 后靠这一步保证不越界；不传（Infinity）时保持原来的固定摆放。
+ */
+function dimV(T, x, y0, y1, color, label, sub, side = 'right', W = Infinity) {
   const a = T(x, y0);
   const b = T(x, y1);
   if (Math.abs(b.y - a.y) < 26) return '';
   const lx = a.x;
   const mid = (a.y + b.y) / 2;
-  const tx = side === 'right' ? lx + 7 : lx - 7;
-  const anchor = side === 'right' ? 'start' : 'end';
   const text = sub ? `${label} ${sub}` : label;
+  const place = Number.isFinite(W)
+    ? placeDimLabel({ x: lx, text, fontSize: 12, W, side, gap: 7 })
+    : { tx: side === 'right' ? lx + 7 : lx - 7, anchor: side === 'right' ? 'start' : 'end' };
+  const { tx, anchor } = place;
   return `
     <g stroke="${color}" fill="none">
       <line x1="${n(lx)}" y1="${n(a.y)}" x2="${n(lx)}" y2="${n(b.y)}" stroke-width="1" marker-start="url(#arS)" marker-end="url(#arS)"/>
@@ -249,7 +311,7 @@ export function renderChart(o) {
   const { W, H, p, values, poses, env, view, minSwingRadius } = o;
 
   const world = computeWorldBounds(p, env);
-  const pad = { l: 34, t: 30, r: view.showDims ? 96 : 34, b: 42 };
+  const pad = chartPadding(W, view.showDims);
   const T = makeTransform(world, W, H, pad);
 
   const body = bodyPolygons(p);
@@ -621,20 +683,20 @@ export function renderChart(o) {
 
     if (show('maxDigHeight')) {
       const t = tip('maxDigHeight');
-      dims.push(dimV(T, t.x, 0, values.maxDigHeight, '#16a34a', 'C 最大挖掘高度', mm(values.maxDigHeight), 'left'));
+      dims.push(dimV(T, t.x, 0, values.maxDigHeight, '#16a34a', 'C 最大挖掘高度', mm(values.maxDigHeight), 'left', W));
     }
     if (show('dumpHeight')) {
       const t = tip('dumpHeight');
-      dims.push(dimV(T, t.x, 0, values.dumpHeight, '#d97706', 'D 最大卸载高度', mm(values.dumpHeight), 'right'));
+      dims.push(dimV(T, t.x, 0, values.dumpHeight, '#d97706', 'D 最大卸载高度', mm(values.dumpHeight), 'right', W));
     }
     if (show('maxDigDepth')) {
       const t = tip('maxDigDepth');
-      dims.push(dimV(T, t.x, 0, -values.maxDigDepth, '#dc2626', 'B 最大挖掘深度', mm(values.maxDigDepth), 'left'));
+      dims.push(dimV(T, t.x, 0, -values.maxDigDepth, '#dc2626', 'B 最大挖掘深度', mm(values.maxDigDepth), 'left', W));
     }
     if (show('verticalWallDepth')) {
       const t = tip('verticalWallDepth');
       dims.push(
-        dimV(T, t.x, 0, -values.verticalWallDepth, '#7c3aed', 'E 最大垂直挖掘深度', mm(values.verticalWallDepth), 'right'),
+        dimV(T, t.x, 0, -values.verticalWallDepth, '#7c3aed', 'E 最大垂直挖掘深度', mm(values.verticalWallDepth), 'right', W),
       );
     }
     if (show('groundMaxRadius')) {
@@ -728,6 +790,19 @@ function clampNum(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+/**
+ * 指标卡的尺寸档位。
+ *
+ * 固定 210px 宽在 360px 画布上要占 58%，会压住图形；窄屏收窄到 ≤176px（约 49%），
+ * 字号与行高同步降一档，仍保证最长一项放得下——最长标签「停机面最大挖掘半径」
+ * 在 10.5px 下约 94.5px，加符号与数值约 140px < 内容宽 152px。
+ */
+export function metricCardMetrics(W, pad) {
+  return W < NARROW_CANVAS_W
+    ? { cw: Math.max(150, Math.min(176, W - pad.l - 16)), rh: 15, headH: 18, fs: 10.5 }
+    : { cw: 210, rh: 17, headH: 20, fs: 11.5 };
+}
+
 /** 左上角指标列表（工程图里图例的常规位置，不遮挡包络） */
 function metricCards(values, o, W, pad) {
   const rows = METRIC_META.map((m) => ({ m, v: values[m.key] })).filter((r) => Number.isFinite(r.v));
@@ -735,9 +810,7 @@ function metricCards(values, o, W, pad) {
   if (Number.isFinite(minSwing)) {
     rows.push({ m: { symbol: 'R', label: '最小回转半径', color: '#f59e0b' }, v: minSwing });
   }
-  const cw = 210;
-  const rh = 17;
-  const headH = 20;
+  const { cw, rh, headH, fs } = metricCardMetrics(W, pad);
   const h = headH + rows.length * rh + 10;
   const x = pad.l + 12;
   const y = pad.t + 10;
@@ -745,11 +818,11 @@ function metricCards(values, o, W, pad) {
   const items = rows
     .map((r, i) => {
       const ty = y + headH + 6 + i * rh;
-      return `<text x="${n(x + 12)}" y="${n(ty)}" font-size="11.5" font-family='${FONT}' fill="#334155">
+      return `<text x="${n(x + 12)}" y="${n(ty)}" font-size="${fs}" font-family='${FONT}' fill="#334155">
           <tspan font-weight="700" fill="${r.m.color}">${esc(r.m.symbol)}</tspan>
           <tspan dx="3">${esc(r.m.label)}</tspan>
         </text>
-      <text x="${n(x + cw - 12)}" y="${n(ty)}" text-anchor="end" font-size="11.5" font-family='${FONT}' fill="#0f172a" font-weight="700">${mm(r.v)}</text>`;
+      <text x="${n(x + cw - 12)}" y="${n(ty)}" text-anchor="end" font-size="${fs}" font-family='${FONT}' fill="#0f172a" font-weight="700">${mm(r.v)}</text>`;
     })
     .join('');
 

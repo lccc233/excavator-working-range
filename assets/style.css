@@ -154,8 +154,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent-soft); borde
 .canvas-toolbar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
 .canvas-toolbar input[type="checkbox"] { accent-color: var(--accent); }
 .canvas-toolbar select { padding: 3px 22px 3px 7px; border: 1px solid var(--border-strong); border-radius: 6px; background-color: #fff; font-size: 12.5px; }
-.chart { flex: 1 1 auto; position: relative; overflow: hidden; background: var(--surface); min-height: 0; }
+.chart { flex: 1 1 auto; position: relative; overflow: hidden; background: var(--surface); min-height: 0; touch-action: pan-y; }
 .chart svg { display: block; }
+/* 放大后手势交给图的平移，页面不再跟着滚；1× 时保持 pan-y，单指上下仍能滚页面 */
+.chart.is-zoomed { touch-action: none; user-select: none; }
+/* 缩放/平移的变换目标。必须是 <svg> 外面的一层：exporter 直接序列化 <svg>，
+   变换写在它身上会被带进导出文件与打印结果 */
+.chart-zoom { width: 100%; height: 100%; transform-origin: 0 0; }
 
 /* ---------- 工作姿态（油缸长度）浮标 ---------- */
 .pose-ctl {
@@ -179,6 +184,20 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent-soft); borde
   background: rgb(255 255 255 / 85%); padding: 2px 7px; border-radius: 4px; pointer-events: none;
 }
 
+/* ---------- 图面缩放控件 ---------- */
+/* 桌面端 bottom: 34px 是为了让开右下角原有的 .perf（占 bottom: 8px 起约 17px 高） */
+.zoom-ctl {
+  position: absolute; right: 10px; bottom: 34px; z-index: 7;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.zoom-ctl .btn {
+  width: 34px; height: 34px; padding: 0; justify-content: center;
+  font-size: 16px; line-height: 1; background: rgb(255 255 255 / 92%);
+}
+.zoom-ctl .btn:disabled { opacity: .45; cursor: default; }
+.zoom-ctl .btn:disabled:hover { background: rgb(255 255 255 / 92%); border-color: var(--border-strong); }
+.zoom-level { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
 /* ---------- 参数表 ---------- */
 .table-wrap { padding: 16px 18px 40px; overflow-y: auto; }
 .schematic-figure {
@@ -199,26 +218,66 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent-soft); borde
 /* ---------- 打印（导出 PDF 走浏览器打印） ---------- */
 .print-only { display: none; }
 
-@media print {
-  @page { size: A4 portrait; margin: 12mm; }
-  html, body { height: auto; background: #fff; }
-  .app { display: block; height: auto; }
-  .topbar, .panel, .canvas-toolbar, .perf, .no-print { display: none !important; }
-  main { display: block; }
-  .canvas-wrap { display: block; }
-  .chart { height: auto; overflow: visible; border: none; }
-  .chart svg { width: 100%; height: auto; max-height: 150mm; }
-  .print-only { display: block; page-break-before: always; }
-  .spec-table { font-size: 10px; }
-  .spec-table th, .spec-table td { padding: 2px 5px; }
-  .table-wrap { padding: 0; overflow: visible; }
+/* ---------- 窄屏（手机 / 小平板） ----------
+ * 关键改动：这里原本是「整屏固定高度 + 网格分行」（grid-template-rows:
+ * minmax(0,1fr) minmax(320px,46vh)）。手机上网址栏 + 换行的顶栏 + 工具栏 + 320px
+ * 面板下限叠加起来，会把图那一行挤到 0 高，app.js 的 `if (W<40||H<40) return`
+ * 随即静默跳过绘制 —— 表现就是「范围图完全不显示」。
+ *
+ * 现在改成：页面自然滚动，图自己拿一块固定高度的画布，**与顶栏/工具栏换了多少行解耦**。
+ */
+@media (max-width: 920px) {
+  /* 移动端地址栏会伸缩：100% / 100vh 会把内容顶到底部 UI 后面，dvh 跟随可视高度 */
+  html, body { height: auto; }
+  .app { height: auto; min-height: 100vh; min-height: 100dvh; }
+
+  /* 不再用「整屏固定 + 网格分行」，避免图那一行被挤成 0 高 */
+  main { display: flex; flex-direction: column; }
+  .canvas-wrap { order: -1; }            /* 图仍排在参数面板之前 */
+
+  /* 图的高度 = 可视高度 − 顶栏与工具栏的实测占位。
+     手机竖屏实测占位约 153px，这里留 12px 余量取 165px；
+     再用 min/max 夹住：既不把图挤没，也不会在长屏上无限拉高。
+     不支持 dvh 时回落到 100vh；两者都读不到时由 min-height 兜底。 */
+  .chart-hold { display: block; }
+  .chart { height: calc(100vh - 165px); height: calc(100dvh - 165px); min-height: 280px; max-height: 520px; }
+
+  .panel { border-right: none; border-bottom: 1px solid var(--border); overflow: visible; }
+
+  /* 姿态浮标不再压在图上，改为图下方一整条 */
+  .pose-ctl { position: static; width: auto; margin: 8px 10px 10px; box-shadow: none; }
+
+  /* 顶栏与工具栏紧凑化 */
+  .topbar { padding: 8px 10px; gap: 8px; }
+  .actions { gap: 6px; }
+  .btn { padding: 6px 10px; font-size: 12.5px; }
+  /* 工具栏在手机上原本会折成 4~5 行（320px 宽时量到 142px 高），
+     把图一路推到首屏之外。改成单行横向滚动：高度稳定在 43px，控件全部仍可达。 */
+  .canvas-toolbar {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 10px; padding: 6px 10px; scrollbar-width: thin;
+  }
+  .canvas-toolbar > * { flex: 0 0 auto; }
+
+  /* 计时读数改为静态一行，把右下角让给缩放按钮 */
+  .perf { position: static; text-align: right; padding: 4px 10px 0; }
+  .perf:empty { display: none; }
+  .zoom-ctl { bottom: 10px; }
+
+  /* 参数表可横向滚动，不再撑破页面 */
+  .table-wrap { padding: 12px 12px 32px; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .spec-table { font-size: 12px; }
 }
 
-/* ---------- 窄屏 ---------- */
-@media (max-width: 920px) {
-  main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(320px, 46vh); }
-  .panel { border-right: none; border-bottom: 1px solid var(--border); }
-  .canvas-wrap { order: -1; }
+/* ---------- 更窄的手机 ---------- */
+@media (max-width: 560px) {
+  .brand small { display: none; }         /* 副标题让位给按钮 */
+  .topbar .actions { width: 100%; }
+}
+
+/* ---------- 手机横屏：竖向空间紧张，顶栏/工具栏占位更小（约 131px），少留一些 ---------- */
+@media (max-width: 920px) and (orientation: landscape) {
+  .chart { height: calc(100vh - 145px); height: calc(100dvh - 145px); min-height: 200px; max-height: 340px; }
 }
 
 /* ---------- 提示气泡 ---------- */
@@ -229,3 +288,27 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent-soft); borde
   transition: opacity .18s, transform .18s; z-index: 50; max-width: 80vw; text-align: center;
 }
 #toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
+
+/* --------------------------------------------------------------------------
+ * 打印必须放在文件末尾：打印时视口是纸张宽度（A4 ≈ 794px），
+ * `@media (max-width: 920px)` 同样会命中；媒体查询不增加优先级、靠源码顺序决胜，
+ * 所以窄屏块里的 main{display:flex} / .chart{height:…} 会盖掉打印排版。
+ * 把它放在最后，打印规则永远胜出。
+ * -------------------------------------------------------------------------- */
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body { height: auto; background: #fff; }
+  .app { display: block; height: auto; min-height: 0; }
+  .topbar, .panel, .canvas-toolbar, .perf, .no-print { display: none !important; }
+  main { display: block; }
+  .canvas-wrap { display: block; }
+  .chart-hold { display: block; }
+  .chart { height: auto; min-height: 0; overflow: visible; border: none; }
+  .chart svg { width: 100%; height: auto; max-height: 150mm; }
+  /* 打印的是完整未缩放的图，不带上屏幕上的缩放/平移 */
+  .chart-zoom { transform: none !important; width: auto; height: auto; }
+  .print-only { display: block; page-break-before: always; }
+  .spec-table { font-size: 10px; }
+  .spec-table th, .spec-table td { padding: 2px 5px; }
+  .table-wrap { padding: 0; overflow: visible; }
+}

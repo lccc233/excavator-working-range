@@ -62,7 +62,16 @@
       </div>
 
       <div class="chart-hold">
-        <div class="chart" id="chart"></div>
+        <!-- 缩放/平移只动 .chart-zoom 这一层：变换若写在 <svg> 上会被 exporter 序列化进导出文件 -->
+        <div class="chart" id="chart">
+          <div class="chart-zoom" id="chartZoom"></div>
+          <div class="zoom-ctl no-print" id="zoomCtl">
+            <button class="btn" id="zoomIn" aria-label="放大" title="放大（也可双指捏合 / 滚轮）">＋</button>
+            <button class="btn" id="zoomOut" aria-label="缩小" title="缩小">－</button>
+            <button class="btn" id="zoomReset" aria-label="恢复原始视图" title="恢复原始视图（也可双击图面）">⤢</button>
+            <span class="zoom-level" id="zoomLevel">1×</span>
+          </div>
+        </div>
 
         <!-- 工作姿态（可调）：直接调三个油缸的长度，范围 = 安装距 ~ 安装距+行程 -->
         <div class="pose-ctl no-print" id="poseCtl" hidden>
