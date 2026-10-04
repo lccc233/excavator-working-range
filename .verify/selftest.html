@@ -28,6 +28,7 @@ import { validateParams, PARAM_SPEC } from '../assets/core/params.js';
 import { armCylLength, armDeltaFromLength, armRodPerpInBoom, armRodPerpSpan, bucketCylLength, resolveJointRanges, boomCylBodyPoint, boomCylLength, cylinderPose, verifyCylinderLayout } from '../assets/core/cylinders.js';
 import { encodeParams, decodeParams, buildShareUrl, matchPreset } from '../assets/core/share.js';
 import { renderChart, resolvePose, cylinderLengthRange } from '../assets/ui/draw.js';
+import { createChartZoom } from '../assets/ui/zoom.js';
 import { renderSchematicFigure, schematicModel } from '../assets/ui/schematic.js';
 import { renderSpecTables } from '../assets/ui/chart-table.js';
 import { exportPng, exportSvg, serializeSvg, svgToCanvas, copyText, safeFilename } from '../assets/ui/exporter.js';
@@ -446,6 +447,81 @@ async function main() {
   check('参数表规格数量与 PARAM_SPEC 一致', PARAM_SPEC.length === 40, `${PARAM_SPEC.length} 项`);
   check('指标键完整', METRIC_KEYS.length === 6);
   check('safeFilename 生成安全文件名', !/[\\/:*?"<>|\s]/.test(safeFilename('某 20 吨级挖掘机/测试*', 'png')), safeFilename('某 20 吨级挖掘机/测试*', 'png'));
+
+  /* ---------------- 8. 窄屏与缩放 ---------------- */
+  section('窄屏与缩放');
+  {
+    // 这一节补的是「Node 里测不到」的那一层：真实字形盒与真实布局。
+    // 背景：手机端曾经完全看不到作业范围图（画布被 CSS 挤到 0 高，
+    // app.js 的 W<40||H<40 兜底静默跳过绘制），而当时所有自动化都只跑桌面尺寸。
+    const DIMS = ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'];
+    const narrowView = {
+      showEnvelope: true, showDims: true, showBody: true, showInner: false,
+      showTailCircle: true, poseMode: 'custom', customPose: {}, dimKeys: DIMS,
+    };
+
+    for (const [W, H] of [[320, 320], [360, 460], [390, 460], [844, 390]]) {
+      const host2 = document.createElement('div');
+      host2.style.cssText = `width:${W}px;height:${H}px`;
+      stage.appendChild(host2);
+      host2.innerHTML = renderChart({
+        W, H, p: sy, values, poses, env,
+        view: narrowView,
+        minSwingRadius: values.minSwingRadius ?? computeMinSwingRadius(sy),
+      });
+      const svgN = host2.querySelector('svg');
+      check(`窄屏 ${W}×${H} 渲染出 <svg>`, !!svgN);
+      if (!svgN) continue;
+      const bb = svgN.getBBox();
+      // 真实字形盒：Node 里只能用估算宽度近似，这里用浏览器算
+      check(
+        `窄屏 ${W}×${H} 图形与文字都在画布内`,
+        bb.x >= -1 && bb.y >= -1 && bb.x + bb.width <= W + 1 && bb.y + bb.height <= H + 1,
+        `bbox x∈[${bb.x.toFixed(1)},${(bb.x + bb.width).toFixed(1)}] y∈[${bb.y.toFixed(1)},${(bb.y + bb.height).toFixed(1)}]`,
+      );
+      // 最长的那条纵向标注（垂直挖掘深度 E）不得越出画布右缘
+      const eLabel = [...svgN.querySelectorAll('text')].find((t) => t.textContent.includes('最大垂直挖掘深度'));
+      if (eLabel) {
+        const lb = eLabel.getBBox();
+        check(`窄屏 ${W}×${H} 「E 最大垂直挖掘深度」标注未越界`, lb.x + lb.width <= W + 1,
+          `右缘 ${(lb.x + lb.width).toFixed(1)} / 画布 ${W}`);
+      }
+      host2.remove();
+    }
+
+    // 缩放/平移控制器：真实 DOM、真实布局
+    const zoomHost = document.createElement('div');
+    zoomHost.style.cssText = 'position:relative;width:390px;height:460px;overflow:hidden';
+    const zoomContent = document.createElement('div');
+    zoomContent.style.cssText = 'width:100%;height:100%';
+    zoomHost.appendChild(zoomContent);
+    stage.appendChild(zoomHost);
+
+    const z = createChartZoom({ host: zoomHost, content: zoomContent });
+    check('createChartZoom：初始为单位变换', z.getTransform().k === 1 && z.getTransform().tx === 0, JSON.stringify(z.getTransform()));
+    check('createChartZoom：初始 transform 为单位阵', /matrix\(1, 0, 0, 1, 0, 0\)/.test(getComputedStyle(zoomContent).transform));
+
+    z.zoomBy(2);
+    const t2 = z.getTransform();
+    check('zoomBy(2)：k 变为 2 且位移被钳在界内', Math.abs(t2.k - 2) < 1e-6 && t2.tx <= 0 && t2.tx >= -390 * 1, JSON.stringify(t2));
+    check('zoomBy(2)：加了 is-zoomed 类（触摸交给图、页面不跟着滚）', zoomHost.classList.contains('is-zoomed'));
+
+    z.reset();
+    const t1 = z.getTransform();
+    check('reset()：回到 1× 且位移归零', t1.k === 1 && t1.tx === 0 && t1.ty === 0, JSON.stringify(t1));
+    check('reset()：移除 is-zoomed 类', !zoomHost.classList.contains('is-zoomed'));
+
+    // 拖到极远处也不能把图拖出视野
+    z.zoomBy(3);
+    z.zoomBy(1, -99999, -99999);
+    const tc = z.getTransform();
+    check('钳制：内容始终盖满视口（tx∈[W−W·k, 0]）',
+      tc.tx <= 0 && tc.tx >= 390 - 390 * tc.k - 1e-6 && tc.ty <= 0 && tc.ty >= 460 - 460 * tc.k - 1e-6,
+      JSON.stringify(tc));
+    z.reset();
+    z.destroy();
+    zoomHost.remove();
+  }
 
   /* ---------------- 汇总 ---------------- */
   summary.textContent = fail === 0
