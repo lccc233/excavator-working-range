@@ -7,7 +7,16 @@
 <meta name="description" content="在线调整动臂长度、斗杆长度、铲斗与铰点位置等几何参数，实时生成反铲液压挖掘机作业范围包络图，并计算最大挖掘半径、最大挖掘深度、最大挖掘高度、最大卸载高度、最大垂直挖掘深度等作业尺寸。">
 <meta name="theme-color" content="#2563eb">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Cpath d='M5 24h7l4-9 6-3' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20 12l5 2-2 5z' fill='white'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/style.css">
+<!--
+  ?v= 是**发版戳**，用来把「已经缓存了旧版」的访客拉过来。
+  线上静态资源曾在不知情的情况下被缓存 7 天（文件名不带内容指纹），浏览器在
+  自己存的 max-age 到期前根本不会回源 —— 只把服务器的缓存时间调短是救不回这些人的，
+  必须换一个它们没见过的 URL。
+  现在线上缓存已改成 5 分钟（见 deploy/nginx-excavator.conf），任何带 ?v= 的 URL
+  也会每 5 分钟回源校验一次，所以这个戳**不需要每次发版都改**；留着是为了万一
+  又出现长缓存时能一键强推。
+-->
+<link rel="stylesheet" href="assets/style.css?v=20261005a">
 </head>
 <body>
 <div class="app">
@@ -110,6 +119,6 @@
   <p style="padding:24px;font-size:14px">本工具需要启用 JavaScript 才能实时计算并绘制作业范围图。</p>
 </noscript>
 
-<script type="module" src="assets/ui/app.js"></script>
+<script type="module" src="assets/ui/app.js?v=20261005a"></script>
 </body>
 </html>

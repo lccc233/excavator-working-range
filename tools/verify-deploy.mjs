@@ -79,6 +79,39 @@ const title = /<title>[^<]+<\/title>/.exec(html)?.[0] ?? '(无 title)';
 console.log(`\n文件一致：${ok}/${files.length}　总耗时 ${totalMs} ms（平均 ${(totalMs / files.length).toFixed(0)} ms）`);
 console.log(`首页：HTTP ${home.status}，${html.length} 字符，content-type=${charset}，${title}`);
 
+/* ------------------------------------------------------------------ *
+ * 按「用户真正请求的 URL」再验一遍
+ * ------------------------------------------------------------------
+ * 上面那轮用的是我们自己造的穿透串（?v<时间戳>），所以它不能发现
+ * 「index.html 里把资源 URL 写错了」——比如发版戳拼错、路径写错，
+ * 用户请求的是一个 404 的地址，而上面那轮照样全绿。
+ * 这里改成：把线上 index.html / app.js 里**原样写的**引用抠出来，
+ * 按原样请求，再与本地逐字节比对。
+ * ------------------------------------------------------------------ */
+const refFiles = [];
+for (const m of html.matchAll(/(?:href|src)="(assets\/[^"]+)"/g)) refFiles.push({ url: m[1], from: 'index.html' });
+for (const m of (bodies.get('assets/ui/app.js') ?? '').matchAll(/from\s+'(\.\/[^']+)'/g)) {
+  refFiles.push({ url: `assets/ui/${m[1].slice(2)}`, from: 'app.js' });
+}
+
+let refFail = 0;
+console.log(`\n按页面里原样写的 URL 复核（${refFiles.length} 个引用${refFiles.some((r) => r.url.includes('?')) ? '，含发版戳' : ''}）：`);
+for (const r of refFiles) {
+  const localPath = r.url.split('?')[0];
+  let local;
+  try {
+    local = await readFile(path.join(ROOT, localPath));
+  } catch {
+    console.log(`SKIP ${r.url.padEnd(42)} （本地没有 ${localPath}，不是上线文件）`);
+    continue;
+  }
+  const res = await fetch(`${BASE}/${r.url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const pass = res.status === 200 && sha(buf) === sha(local);
+  if (!pass) refFail++;
+  console.log(`${pass ? 'OK  ' : 'FAIL'} ${r.url.padEnd(42)} HTTP ${res.status}  ${buf.length}B  ← ${r.from}`);
+}
+
 let featureFail = 0;
 for (const [file, needle, want, why] of FEATURES) {
   const hit = (bodies.get(file) ?? '').includes(needle);
@@ -88,13 +121,14 @@ for (const [file, needle, want, why] of FEATURES) {
 }
 
 const problems =
-  bad.length + (home.status === 200 ? 0 : 1) + (charset.includes('charset=utf-8') ? 0 : 1) + featureFail;
+  bad.length + refFail + (home.status === 200 ? 0 : 1) + (charset.includes('charset=utf-8') ? 0 : 1) + featureFail;
 if (problems) {
   if (bad.length) {
     console.log('\n不一致明细：');
     for (const b of bad) console.log('  ' + b);
   }
+  if (refFail) console.log(`\n有 ${refFail} 个「页面里原样写的 URL」拿不到正确内容（见上面 FAIL 行）。`);
   console.error(`\n结论：验证未通过（${problems} 处问题）`);
   process.exit(1);
 }
-console.log(`\n结论：线上 ${files.length} 个文件与本地构建逐字节一致，关键特性均在线上。`);
+console.log(`\n结论：线上 ${files.length} 个文件与本地构建逐字节一致，页面引用的 URL 全部可达且内容正确，关键特性均在线上。`);

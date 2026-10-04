@@ -15,8 +15,13 @@ import { validateParams } from '../core/params.js';
 import { computeMetrics } from '../core/metrics.js';
 import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js';
 import { decodeParams, encodeParams } from '../core/share.js';
-import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js';
-import { createChartZoom } from './zoom.js';
+// ?v= 发版戳：这两个模块改过，而老访客的浏览器可能还攥着 7 天缓存的旧副本
+// （资源文件名不带内容指纹，浏览器在自己的 max-age 到期前不会回源）。
+// 换一个没见过的 URL 才能把它们拉过来；线上缓存已改为 5 分钟，
+// 带 ?v= 的 URL 同样每 5 分钟回源校验，所以这个戳不必每次发版都改。
+// 其余 import 的文件本次未改动，不需要加。
+import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005a';
+import { createChartZoom } from './zoom.js?v=20261005a';
 import { renderSchematicFigure } from './schematic.js';
 import { createControls } from './controls.js';
 import { renderSpecTables, renderPrintHeader } from './chart-table.js';
