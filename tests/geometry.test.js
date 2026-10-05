@@ -93,7 +93,7 @@ test('铲斗转角范围由实际油缸安装距和行程解出', () => {
   for (const m of PRESETS) {
     const r = bucketRotationRange(m);
     assert.ok(Number.isFinite(r.curl) && Number.isFinite(r.dump), `${m.id}: 铲斗端点角度必须有限`);
-    assert.ok(r.curl > r.dump, `${m.id}: 全缩收斗角应大于全伸卸料角`);
+    assert.ok(r.curl < r.dump, `${m.id}: 顺时针收斗角应小于开斗角`);
     assert.ok(r.max > r.min, `${m.id}: 铲斗角度范围必须大于 0`);
   }
 });

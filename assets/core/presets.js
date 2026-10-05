@@ -18,7 +18,7 @@
  *   · 铲斗连杆机构：摇杆与连杆都是「两铰点杆」——
  *     摇杆一端铰在斗杆的 D 点，另一端 P 与铲斗油缸活塞杆、连杆共用一个销轴；
  *     连杆另一端铰在铲斗背板的 E 点（斗杆–摇杆–连杆–铲斗四连杆）。
- *     铲斗油缸全缩 = 收斗位、全伸 = 卸料位。
+ *     铲斗油缸全伸 = 收斗位、全缩 = 开斗位。
  *   以上每一条都由 verifyCylinderLayout() 逐项自检，并由 tests/cylinders.test.js 守住。
  *
  * `nominal`   厂家标称值，仅用于对标校验与参数表参考列，不参与几何计算。
@@ -27,7 +27,7 @@
  * 标定数据来源（某主机厂 20 吨级机型的公开产品样本，已逐条核对原文）：
  *   · 某 20 吨级挖掘机 —— 动臂 5700、斗杆 2925、斗容 0.93 m³
  *     停机面最大挖掘半径 9950、最大挖掘深度 6600、最大挖掘高度 9570、
- *     最大卸载高度 6700、最大垂直挖掘深度 5800、最小回转半径 3730
+ *     最大卸载高度 6700、最小回转半径 3730
  *
  * 标定结果（tools/calibrate.mjs 输出）：全部标称项偏差 < 0.07%。
  */
@@ -92,7 +92,6 @@ export const BASE_DEFAULTS = {
   bucketRadius: 1435,
   bucketCapacity: 0.93,
   boomBend: 300,
-  bucketBottomAngle: 63.74,
   pivotX: -16,
   pivotY: 1367,
   tailSwingRadius: 2890,
@@ -118,7 +117,6 @@ export const PRESETS = [
     bucketRadius: 1435,
     bucketCapacity: 0.93,
     boomBend: 300,
-    bucketBottomAngle: 63.74,
     pivotX: -16,
     pivotY: 1367,
     tailSwingRadius: 2890,
@@ -136,7 +134,6 @@ export const PRESETS = [
       maxDigDepth: 6600,
       maxDigHeight: 9570,
       dumpHeight: 6700,
-      verticalWallDepth: 5800,
       minSwingRadius: 3730,
     },
     calibration: { boomAngleMin: -39.26, boomAngleMax: 52.3, armRelMin: -140.5, armRelMax: -1.78 },

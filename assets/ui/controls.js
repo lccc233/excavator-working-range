@@ -9,7 +9,7 @@
  *     失焦或回车才提交并做范围收敛
  */
 
-import { PARAM_SPEC, PARAM_GROUPS, validateParams } from '../core/params.js?v=20261005b';
+import { PARAM_SPEC, PARAM_GROUPS, validateParams } from '../core/params.js?v=20261005c';
 
 const GROUP_HINT = {
   工作装置几何: '决定作业范围的基本尺寸',

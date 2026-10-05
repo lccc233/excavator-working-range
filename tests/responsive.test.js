@@ -36,7 +36,6 @@ const DEFAULT_DIMS = [
   'maxDigHeight',
   'dumpHeight',
   'maxDigDepth',
-  'verticalWallDepth',
   'minSwingRadius',
 ];
 
@@ -121,7 +120,7 @@ test('metricCardMetrics：窄屏指标卡收窄，但仍装得下最长的标签
 
   // 内容宽 = cw − 左右各 12px 内边距；最长行 = 符号 + 标签 + 数值
   const inner = narrow.cw - 24;
-  for (const meta of [{ s: 'A′', l: '停机面最大挖掘半径', v: '9,950' }, { s: 'E', l: '最大垂直挖掘深度', v: '5,799' }]) {
+  for (const meta of [{ s: 'A′', l: '停机面最大挖掘半径', v: '9,950' }, { s: 'C', l: '最大挖掘高度', v: '9,570' }]) {
     const rowW = estimateTextWidth(meta.s, narrow.fs) + 3 + estimateTextWidth(meta.l, narrow.fs) + estimateTextWidth(meta.v, narrow.fs);
     assert.ok(rowW <= inner, `「${meta.l}」行宽 ${rowW.toFixed(0)}px > 内容宽 ${inner.toFixed(0)}px`);
   }
@@ -144,7 +143,7 @@ test('placeDimLabel：右侧放得下就用右侧（与历史摆法一致）', (
 });
 
 test('placeDimLabel：右侧放不下就翻到左侧', () => {
-  const text = 'E 最大垂直挖掘深度 5,799';
+  const text = 'A′ 停机面最大挖掘半径 9,950';
   const tw = estimateTextWidth(text, 12);
   const W = 400;
   const x = W - 30; // 右侧必然放不下，左侧放得下
@@ -155,7 +154,7 @@ test('placeDimLabel：右侧放不下就翻到左侧', () => {
 });
 
 test('placeDimLabel：两侧都放不下时内收，且永不越界（全宽度扫描）', () => {
-  const texts = ['E 最大垂直挖掘深度 5,799', 'D 最大卸载高度 6,700', 'C 最大挖掘高度 9,570', '短', ''];
+  const texts = ['A′ 停机面最大挖掘半径 9,950', 'D 最大卸载高度 6,700', 'C 最大挖掘高度 9,570', '短', ''];
   for (const W of [320, 360, 390, 430, 480, 560, 577, 768, 1000, 1500]) {
     for (const text of texts) {
       const tw = estimateTextWidth(text, 12);

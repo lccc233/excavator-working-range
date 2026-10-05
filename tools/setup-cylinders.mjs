@@ -281,7 +281,7 @@ function designArm(p) {
  *
  * @returns {object[]} 0 或 1 个候选
  */
-function buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir) {
+function buildBucket(p, psiRetracted, psiExtended, o, branch, targetStroke, dir) {
   const L2 = p.armLength;
   const R3 = p.bucketRadius;
   const branchSign = branch >= 0 ? 1 : -1;
@@ -289,7 +289,7 @@ function buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir) {
   const C = P(L2, 0);
   const DC = sub(C, D);
   const psiDC = atan2d(DC);
-  const psiMid = (psiCurl + psiDump) / 2;
+  const psiMid = (psiRetracted + psiExtended) / 2;
   // E 的相位：基础相位让 E 相对 D 的扫掠弧张开在连杆能跟上的方向上，
   // ePhase 再整体旋转这套连杆几何，使摇杆扫掠弧能对准「垂直于油缸轴线」的方向
   // （那里缸长单调、变化最快，也正是真机的布置）
@@ -305,7 +305,7 @@ function buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir) {
   let minDE = Infinity;
   let maxDE = -Infinity;
   for (let i = 0; i <= 120; i++) {
-    const dE = len(sub(at(psiDump + ((psiCurl - psiDump) * i) / 120), D));
+    const dE = len(sub(at(psiExtended + ((psiRetracted - psiExtended) * i) / 120), D));
     if (dE < minDE) minDE = dE;
     if (dE > maxDE) maxDE = dE;
   }
@@ -327,7 +327,7 @@ function buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir) {
   };
 
   const nPsi = 25;
-  const psis = Array.from({ length: nPsi + 1 }, (_, i) => psiDump + ((psiCurl - psiDump) * i) / nPsi);
+  const psis = Array.from({ length: nPsi + 1 }, (_, i) => psiExtended + ((psiRetracted - psiExtended) * i) / nPsi);
   const p5Alongs = [];
   for (let a = 0.08; a <= Math.min(o.dAlong - 0.03, 0.62) + 1e-9; a += 0.035) p5Alongs.push(a);
   const p5Perps = [0.1, 0.14, 0.18, 0.22, 0.26].map((v) => v * L2);
@@ -419,7 +419,7 @@ function buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir) {
 }
 
 /** 评估一个四连杆候选：方向、单调、量级、干涉。失败时也带上已算出的量，便于诊断。 */
-function evalBucket(p, psiCurl, psiDump, cand, branch) {
+function evalBucket(p, psiRetracted, psiExtended, cand, branch) {
   const q = { ...p, ...cand.params, bktBranch: branch };
   const L2 = p.armLength;
   const base = { params: cand.params, branch, meta: cand.meta, r: cand.params.bktRockerLen, linkLen: cand.params.bktLinkLen };
@@ -429,7 +429,7 @@ function evalBucket(p, psiCurl, psiDump, cand, branch) {
   let dir = 0;
   const lens = [];
   for (let i = 0; i <= n; i++) {
-    const psi = psiDump + ((psiCurl - psiDump) * i) / n;
+    const psi = psiExtended + ((psiRetracted - psiExtended) * i) / n;
     const L = bucketCylLength(q, psi);
     if (!Number.isFinite(L)) return { ...base, fail: 'assemble' };
     if (prev != null) {
@@ -445,7 +445,7 @@ function evalBucket(p, psiCurl, psiDump, cand, branch) {
   const stroke = open - closed;
   Object.assign(base, { closed, open, stroke });
   if (!mono) return { ...base, fail: 'mono' };
-  // 真机关系：铲斗油缸全缩 → 收斗
+  // 缸长端点：从全伸角扫描到全缩角，缸长应减小
   if (!(lens[lens.length - 1] < lens[0])) return { ...base, fail: 'dir' };
   if (!(closed > 0.3 * L2 && closed < 0.78 * L2)) return { ...base, fail: 'closed' };
   if (!(stroke > 0.2 * L2 && stroke < 0.46 * L2)) return { ...base, fail: 'stroke' };
@@ -476,7 +476,7 @@ function evalBucket(p, psiCurl, psiDump, cand, branch) {
     return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
   };
   for (let i = 0; i <= 24; i++) {
-    const psi = psiDump + ((psiCurl - psiDump) * i) / 24;
+    const psi = psiExtended + ((psiRetracted - psiExtended) * i) / 24;
     const E = rot(C, toRad(psi), e);
     const dE = Math.hypot(E.x - D.x, E.y - D.y);
     if (dE < 1e-9 || dE > r + linkLen || dE < Math.abs(r - linkLen)) return { ...base, fail: 'assemble' };
@@ -514,7 +514,7 @@ function chordGap(from, to, L2, half, samples) {
   return worst;
 }
 
-function designBucket(p, psiCurl, psiDump) {
+function designBucket(p, psiRetracted, psiExtended) {
   const L2 = p.armLength;
   const rnd = mulberry32(0x5eed1ce);
   let best = null;
@@ -531,9 +531,9 @@ function designBucket(p, psiCurl, psiDump) {
     };
     for (const branch of [1, -1]) {
       for (const dir of [-1, 1]) {
-        for (const cand of buildBucket(p, psiCurl, psiDump, o, branch, targetStroke, dir)) {
+        for (const cand of buildBucket(p, psiRetracted, psiExtended, o, branch, targetStroke, dir)) {
           evaluated++;
-          const v = evalBucket(p, psiCurl, psiDump, cand, branch);
+          const v = evalBucket(p, psiRetracted, psiExtended, cand, branch);
           if (v.fail) { stat[v.fail] = (stat[v.fail] ?? 0) + 1; continue; }
           const params = cand.params;
           const score =
@@ -580,8 +580,8 @@ export function setupCylinders(p, opts = {}) {
     alphaMax: cal.boomAngleMax,
     deltaMin: cal.armRelMin,
     deltaMax: cal.armRelMax,
-    psiCurl: 90 - (cal.boomAngleMax + cal.armRelMax),
-    psiDump: 90 - (cal.boomAngleMax + cal.armRelMax) - 180,
+    psiRetracted: 90 - (cal.boomAngleMax + cal.armRelMax),
+    psiExtended: 90 - (cal.boomAngleMax + cal.armRelMax) - 180,
   };
 
   const boom = designBoom(p);
@@ -606,7 +606,7 @@ export function setupCylinders(p, opts = {}) {
       linkLen: p.bktLinkLen,
     };
   } else {
-    bkt = designBucket(p, target.psiCurl, target.psiDump);
+    bkt = designBucket(p, target.psiRetracted, target.psiExtended);
     if (!bkt) return null;
   }
 
@@ -617,12 +617,12 @@ export function setupCylinders(p, opts = {}) {
 
   const machine = { ...withGeom, ...cyl };
   const r = resolveJointRanges(machine);
-  if (![r.alphaMin, r.alphaMax, r.deltaMin, r.deltaMax, r.psiCurl, r.psiDump].every(Number.isFinite)) return null;
+  if (![r.alphaMin, r.alphaMax, r.deltaMin, r.deltaMax, r.psiRetracted, r.psiExtended].every(Number.isFinite)) return null;
 
   // 正反解回代校验（ψ 区间）
   let rtErr = 0;
   for (let i = 0; i <= 40; i++) {
-    const psi = r.psiDump + ((r.psiCurl - r.psiDump) * i) / 40;
+    const psi = r.psiExtended + ((r.psiRetracted - r.psiExtended) * i) / 40;
     const L = bucketCylLength(machine, psi);
     const back = bucketPsiFromLength(machine, L);
     if (!Number.isFinite(L) || !Number.isFinite(back)) { rtErr = Infinity; break; }
@@ -636,8 +636,8 @@ export function setupCylinders(p, opts = {}) {
     alphaMax: r.alphaMax - target.alphaMax,
     deltaMin: r.deltaMin - target.deltaMin,
     deltaMax: r.deltaMax - target.deltaMax,
-    psiCurl: r.psiCurl - target.psiCurl,
-    psiDump: r.psiDump - target.psiDump,
+    psiRetracted: r.psiRetracted - target.psiRetracted,
+    psiExtended: r.psiExtended - target.psiExtended,
   };
   const layout = verifyCylinderLayout(machine);
   return { machine, geom: all, cyl, target, r, dev, bkt, rtErr, layout, boomMeta: boom.meta, armMeta: arm.meta };
@@ -657,8 +657,8 @@ if (isMain) {
   if (process.argv.includes('--probe-bucket')) {
     // 诊断：固定几组比例，打印四连杆构造过程的中间量
     const p = PRESETS[0];
-    const psiCurl = 90 - (p.calibration.boomAngleMax + p.calibration.armRelMax);
-    const psiDump = psiCurl - 180;
+    const psiRetracted = 90 - (p.calibration.boomAngleMax + p.calibration.armRelMax);
+    const psiExtended = psiRetracted - 180;
     for (const o of [
       { dAlong: 0.9, dPerp: 0.08, eScale: 0.55, linkScale: 1.0, p5Along: 0.3, p5Perp: 0.18 },
       { dAlong: 0.85, dPerp: 0.1, eScale: 0.55, linkScale: 0.95, p5Along: 0.3, p5Perp: 0.18 },
@@ -666,10 +666,10 @@ if (isMain) {
     ]) {
       for (const branch of [1, -1]) {
         for (const dir of [-1, 1]) {
-          const out = buildBucket(p, psiCurl, psiDump, o, branch, 0.34 * p.armLength, dir);
+          const out = buildBucket(p, psiRetracted, psiExtended, o, branch, 0.34 * p.armLength, dir);
           console.log(`${JSON.stringify(o)} branch=${branch} dir=${dir} → 候选 ${out.length}`);
           for (const c of out) {
-            const v = evalBucket(p, psiCurl, psiDump, c, branch);
+            const v = evalBucket(p, psiRetracted, psiExtended, c, branch);
             console.log(
               `   摇杆=${c.params.bktRockerLen} 连杆=${c.params.bktLinkLen} 行程=${Math.round(v.stroke)} 全缩=${Math.round(v.closed)} 缸间隙=${Number.isFinite(v.cylGap) ? Math.round(v.cylGap) : '—'} 连杆间隙=${Number.isFinite(v.linkGap) ? Math.round(v.linkGap) : '—'} fail=${v.fail ?? 'OK'}`,
             );
@@ -694,10 +694,10 @@ if (isMain) {
     console.log('='.repeat(92));
     if (!s) {
       console.log('  ✗ 未找到可行布置');
-      const psiCurl = 90 - (p.calibration.boomAngleMax + p.calibration.armRelMax);
+      const psiRetracted = 90 - (p.calibration.boomAngleMax + p.calibration.armRelMax);
       const boom = designBoom(p);
       const arm = designArm(p);
-      const bkt = designBucket(p, psiCurl, psiCurl - 180);
+      const bkt = designBucket(p, psiRetracted, psiRetracted - 180);
       console.log(`     动臂油缸: ${boom ? 'OK' : '失败'}`);
       console.log(`     斗杆油缸: ${arm ? 'OK' : '失败'}  ${JSON.stringify(designArm.stat ?? {})}`);
       console.log(`     铲斗四连杆: ${bkt ? 'OK' : '失败'}  ${JSON.stringify(designBucket.stat ?? {})}`);
@@ -719,8 +719,8 @@ if (isMain) {
       ['动臂仰角上限', s.target.alphaMax, s.r.alphaMax, s.dev.alphaMax],
       ['斗杆转角下限', s.target.deltaMin, s.r.deltaMin, s.dev.deltaMin],
       ['斗杆转角上限', s.target.deltaMax, s.r.deltaMax, s.dev.deltaMax],
-      ['铲斗全伸 ψ收', s.target.psiCurl, s.r.psiCurl, s.dev.psiCurl],
-      ['铲斗全缩 ψ卸', s.target.psiDump, s.r.psiDump, s.dev.psiDump],
+      ['铲斗全缩 ψ缩', s.target.psiRetracted, s.r.psiRetracted, s.dev.psiRetracted],
+      ['铲斗全伸 ψ伸', s.target.psiExtended, s.r.psiExtended, s.dev.psiExtended],
     ];
     let worst = 0;
     for (const [label, t, v, d] of rows) {
@@ -754,12 +754,12 @@ if (isMain) {
   console.log(worstAll < 0.1 ? '全部机型反解偏差 < 0.1° ✅' : `存在 ${worstAll.toFixed(3)}° 偏差 ❌`);
 }
 
-export function probeBuildDebug(p, psiCurl, psiDump, o) {
+export function probeBuildDebug(p, psiRetracted, psiExtended, o) {
   const L2 = p.armLength, R3 = p.bucketRadius;
   const D = { x: o.dAlong*L2, y: o.dPerp*L2 }, C = { x: L2, y: 0 };
   const rDC = Math.hypot(C.x-D.x, C.y-D.y);
   const psiDC = Math.atan2(C.y-D.y, C.x-D.x)*180/Math.PI;
-  const psiMid = (psiCurl+psiDump)/2;
+  const psiMid = (psiRetracted+psiExtended)/2;
   const psiE = 90 - psiMid + psiDC;
   const rE = o.eScale*R3;
   const e = { x: rE*Math.cos(psiE*Math.PI/180), y: rE*Math.sin(psiE*Math.PI/180) };
@@ -768,9 +768,9 @@ export function probeBuildDebug(p, psiCurl, psiDump, o) {
   const rotd = (O,t,v) => ({ x: O.x+v.x*Math.cos(t)-v.y*Math.sin(t), y: O.y+v.x*Math.sin(t)+v.y*Math.cos(t) });
   const pin = (psi, br) => { const E = rotd(C, psi*Math.PI/180, e); const dE = Math.hypot(E.x-D.x, E.y-D.y); if (dE<1e-9||dE>r7+linkLen||dE<Math.abs(r7-linkLen)) return null; const a=(r7*r7-linkLen*linkLen+dE*dE)/(2*dE); const h=Math.sqrt(Math.max(0,r7*r7-a*a)); const ux=(E.x-D.x)/dE, uy=(E.y-D.y)/dE; return { x: D.x+a*ux-br*h*uy, y: D.y+a*uy+br*h*ux }; };
   const out = {};
-  for (const br of [1,-1]) { const P0 = pin(psiCurl, br); if (!P0) { out['br'+br] = 'no-assemble'; continue; }
+  for (const br of [1,-1]) { const P0 = pin(psiRetracted, br); if (!P0) { out['br'+br] = 'no-assemble'; continue; }
     const psi7 = Math.atan2(P0.y-D.y, P0.x-D.x)*180/Math.PI; let prev = psi7, acc = 0;
-    for (let i=1;i<=120;i++){ const psi = psiDump + (psiCurl-psiDump)*i/120; const P7 = pin(psi, br); if(!P7){acc=NaN;break;} const raw=Math.atan2(P7.y-D.y,P7.x-D.x)*180/Math.PI; let d=raw-prev; if(d>180)d-=360; if(d<-180)d+=360; acc+=d; prev=raw; }
+    for (let i=1;i<=120;i++){ const psi = psiExtended + (psiRetracted-psiExtended)*i/120; const P7 = pin(psi, br); if(!P7){acc=NaN;break;} const raw=Math.atan2(P7.y-D.y,P7.x-D.x)*180/Math.PI; let d=raw-prev; if(d>180)d-=360; if(d<-180)d+=360; acc+=d; prev=raw; }
     out['br'+br] = { sweep: +acc.toFixed(1), r7: Math.round(r7), linkLen: Math.round(linkLen), minDE: Math.round(minDE), maxDE: Math.round(maxDE) }; }
   return out; }
 

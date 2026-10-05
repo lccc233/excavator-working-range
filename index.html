@@ -63,7 +63,6 @@
             <option value="maxDigHeight">最大挖掘高度</option>
             <option value="dumpHeight">最大卸载高度</option>
             <option value="maxDigDepth">最大挖掘深度</option>
-            <option value="verticalWallDepth">最大垂直挖掘深度</option>
             <option value="groundMaxRadius">停机面最大挖掘半径</option>
             <option value="none">不显示</option>
           </select>
@@ -107,8 +106,8 @@
       <section class="force-summary" id="forceSummary" aria-label="当前姿态挖掘力" hidden>
         <div class="force-summary-title">当前姿态挖掘力</div>
         <div class="force-results">
-          <div class="force-result"><span>铲斗收斗</span><strong><span id="forceBucketValue">—</span> kN</strong><small>油缸缩回</small></div>
-          <div class="force-result"><span>斗杆内收</span><strong><span id="forceArmValue">—</span> kN</strong><small>油缸伸出</small></div>
+          <div class="force-result"><span>铲斗收斗</span><strong><span id="forceBucketValue">—</span> kN</strong><small id="forceBucketDirection">—</small></div>
+          <div class="force-result"><span>斗杆内收</span><strong><span id="forceArmValue">—</span> kN</strong><small id="forceArmDirection">—</small></div>
         </div>
         <div class="force-summary-note">当前姿态斗齿尖的单动作理论切向挖掘力。液压参数默认值仅供演示，请按真机资料填写；未计入自重、地面条件、泵流量限制、稳定性和结构约束，不作为实际作业能力或安全限值。</div>
       </section>
@@ -127,6 +126,6 @@
   <p style="padding:24px;font-size:14px">本工具需要启用 JavaScript 才能实时计算并绘制作业范围图。</p>
 </noscript>
 
-<script type="module" src="assets/ui/app.js?v=20261005b"></script>
+<script type="module" src="assets/ui/app.js?v=20261005c"></script>
 </body>
 </html>

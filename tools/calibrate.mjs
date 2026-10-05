@@ -21,7 +21,6 @@ const LABEL = {
   maxDigHeight: '最大挖掘高度',
   dumpHeight: '最大卸载高度',
   maxDigDepth: '最大挖掘深度',
-  verticalWallDepth: '最大垂直挖掘深度',
   minSwingRadius: '最小回转半径',
 };
 const ORDER = Object.keys(LABEL);

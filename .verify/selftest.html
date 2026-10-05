@@ -90,7 +90,6 @@ async function main() {
   check('20 吨级机型 最大挖掘深度 = 6600', Math.abs(values.maxDigDepth - 6600) < 33, values.maxDigDepth.toFixed(0));
   check('20 吨级机型 最大挖掘高度 = 9570', Math.abs(values.maxDigHeight - 9570) < 48, values.maxDigHeight.toFixed(0));
   check('20 吨级机型 最大卸载高度 = 6700', Math.abs(values.dumpHeight - 6700) < 34, values.dumpHeight.toFixed(0));
-  check('20 吨级机型 最大垂直挖掘深度 = 5800', Math.abs(values.verticalWallDepth - 5800) < 29, values.verticalWallDepth.toFixed(0));
 
   /* ---------------- 2. 包络 ---------------- */
   section('包络求解（八段圆弧作图法）');
@@ -152,7 +151,7 @@ async function main() {
     W: 1000, H: 700, p: sy, values, poses, env, view: {
       showEnvelope: true, showDims: true, showBody: true, showInner: true,
       showTailCircle: true, poseMode: 'custom', customPose: {},
-      dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'],
+      dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'minSwingRadius'],
     }, minSwingRadius: values.minSwingRadius ?? computeMinSwingRadius(sy),
   });
   host.innerHTML = svgText;
@@ -163,7 +162,7 @@ async function main() {
   check('SVG 含机体多边形', host.querySelectorAll('polygon').length >= 4, `${host.querySelectorAll('polygon').length} 个 polygon`);
   const dimTexts = [...host.querySelectorAll('text')].map((t) => t.textContent).join('|');
   const mm = (v) => Math.round(v).toLocaleString('en-US');
-  for (const [label, key] of [['最大挖掘高度', 'maxDigHeight'], ['最大卸载高度', 'dumpHeight'], ['最大挖掘深度', 'maxDigDepth'], ['最大垂直挖掘深度', 'verticalWallDepth'], ['停机面最大挖掘半径', 'groundMaxRadius']]) {
+  for (const [label, key] of [['最大挖掘高度', 'maxDigHeight'], ['最大卸载高度', 'dumpHeight'], ['最大挖掘深度', 'maxDigDepth'], ['停机面最大挖掘半径', 'groundMaxRadius']]) {
     check(`图上标注「${label} ${mm(values[key])}」`, dimTexts.includes(label) && dimTexts.includes(mm(values[key])));
   }
   const bbox = svgEl.getBBox();
@@ -400,7 +399,7 @@ async function main() {
       `(${body.x.toFixed(0)}, ${body.y.toFixed(0)})`);
     const R = resolveJointRanges(m);
     check(`${m.id} 斗杆油缸伸出 → 收拢`, armCylLength(m, R.deltaMin) > armCylLength(m, R.deltaMax));
-    check(`${m.id} 铲斗油缸全缩 → 收斗`, bucketCylLength(m, R.psiCurl) < bucketCylLength(m, R.psiDump));
+    check(`${m.id} 铲斗油缸伸出 → 收斗`, bucketCylLength(m, R.psiCurl) > bucketCylLength(m, R.psiDump));
   }
 
   {
@@ -444,8 +443,8 @@ async function main() {
   check('参数表含铰点坐标对照表', tables.html.includes('铰点坐标对照'));
   check('参数表含布置自检表', tables.html.includes('油缸布置自检'));
   check('参数表标出杆端相对 A–B 连线的位置', tables.html.includes('相对 A–B 连线'));
-  check('参数表规格数量与 PARAM_SPEC 一致', PARAM_SPEC.length === 40, `${PARAM_SPEC.length} 项`);
-  check('指标键完整', METRIC_KEYS.length === 6);
+  check('参数表规格数量与 PARAM_SPEC 一致', PARAM_SPEC.length === 48, `${PARAM_SPEC.length} 项`);
+  check('指标键完整', METRIC_KEYS.length === 5);
   check('safeFilename 生成安全文件名', !/[\\/:*?"<>|\s]/.test(safeFilename('某 20 吨级挖掘机/测试*', 'png')), safeFilename('某 20 吨级挖掘机/测试*', 'png'));
 
   /* ---------------- 8. 窄屏与缩放 ---------------- */
@@ -454,7 +453,7 @@ async function main() {
     // 这一节补的是「Node 里测不到」的那一层：真实字形盒与真实布局。
     // 背景：手机端曾经完全看不到作业范围图（画布被 CSS 挤到 0 高，
     // app.js 的 W<40||H<40 兜底静默跳过绘制），而当时所有自动化都只跑桌面尺寸。
-    const DIMS = ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'];
+    const DIMS = ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'minSwingRadius'];
     const narrowView = {
       showEnvelope: true, showDims: true, showBody: true, showInner: false,
       showTailCircle: true, poseMode: 'custom', customPose: {}, dimKeys: DIMS,
@@ -479,13 +478,6 @@ async function main() {
         bb.x >= -1 && bb.y >= -1 && bb.x + bb.width <= W + 1 && bb.y + bb.height <= H + 1,
         `bbox x∈[${bb.x.toFixed(1)},${(bb.x + bb.width).toFixed(1)}] y∈[${bb.y.toFixed(1)},${(bb.y + bb.height).toFixed(1)}]`,
       );
-      // 最长的那条纵向标注（垂直挖掘深度 E）不得越出画布右缘
-      const eLabel = [...svgN.querySelectorAll('text')].find((t) => t.textContent.includes('最大垂直挖掘深度'));
-      if (eLabel) {
-        const lb = eLabel.getBBox();
-        check(`窄屏 ${W}×${H} 「E 最大垂直挖掘深度」标注未越界`, lb.x + lb.width <= W + 1,
-          `右缘 ${(lb.x + lb.width).toFixed(1)} / 画布 ${W}`);
-      }
       host2.remove();
     }
 

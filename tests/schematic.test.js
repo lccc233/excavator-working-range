@@ -86,7 +86,7 @@ function polygonIsSimple(pts) {
 function posesOf(m) {
   const { poses } = computeMetrics(m);
   const out = Object.entries(poses).map(([k, v]) => [`指标:${k}`, v]);
-  for (const mode of ['custom', 'maxDigHeight', 'maxDigDepth', 'dumpHeight', 'verticalWallDepth']) {
+  for (const mode of ['custom', 'maxDigHeight', 'maxDigDepth', 'dumpHeight']) {
     const p = resolvePose(m, { poseMode: mode, customPose: {} }, poses);
     if (p) out.push([`视图:${mode}`, p]);
   }
@@ -276,7 +276,7 @@ test('主图切到机构运动简图后仍然良构，且包络与尺寸标注�
         showTailCircle: true,
         poseMode: 'custom',
         customPose: {},
-        dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'],
+        dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'minSwingRadius'],
       },
       minSwingRadius: computeMinSwingRadius(m),
     });

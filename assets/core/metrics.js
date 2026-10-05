@@ -1,5 +1,5 @@
 /**
- * 五大作业尺寸指标 + 停机面最大挖掘半径
+ * 五项作业尺寸指标
  * ==========================================================================
  *
  * 每一项都严格按国标姿态定义实现（而不是「取包络的极值」），
@@ -14,7 +14,6 @@
  *   · 停机面最大挖掘半径：同上，但斗齿尖触地。
  *   · 最大卸载高度：动臂仰角最大、斗杆油缸全缩，且斗杆–铲斗铰点与斗齿尖垂直
  *                   （斗齿尖在铰点正下方）时，斗齿尖距地面的垂直距离。
- *   · 最大垂直挖掘深度：铲斗斗底贴垂直壁面切削时斗齿尖能达到的最深点距地面距离。
  *
  * 关节角范围全部来自油缸行程（cylinders.js），本文件不再读任何角度输入项。
  *
@@ -25,7 +24,7 @@
  */
 
 import { solvePose, toRad, toDeg, clamp } from './geometry.js';
-import { bucketRotationRange, jointRanges } from './params.js';
+import { bucketRotationRange, jointRanges } from './params.js?v=20261005c';
 
 /** 指标元数据：界面与参数表都从这里取标题、符号、单位 */
 export const METRIC_META = [
@@ -34,7 +33,6 @@ export const METRIC_META = [
   { key: 'maxDigHeight', symbol: 'C', label: '最大挖掘高度', color: '#16a34a' },
   { key: 'dumpHeight', symbol: 'D', label: '最大卸载高度', color: '#d97706' },
   { key: 'maxDigDepth', symbol: 'B', label: '最大挖掘深度', color: '#dc2626' },
-  { key: 'verticalWallDepth', symbol: 'E', label: '最大垂直挖掘深度', color: '#7c3aed' },
 ];
 
 export const METRIC_KEYS = METRIC_META.map((m) => m.key);
@@ -139,9 +137,9 @@ export function computeMetrics(p) {
   {
     // 两项都直接取「该姿态下斗齿尖的 y 坐标」。
     // 注意不能写成 yC + R3——那是假设斗齿尖恰好竖直朝上；
-    // 引入油缸后 ψ收 由铲斗油缸全缩位置解出，与 90° 可能差千分之几度，
+    // 引入油缸后全缩端点角由铲斗油缸解出，齿尖朝向与 90° 可能差千分之几度，
     // 按姿态取数才能保证指标与图上画出来的姿态严格一致。
-    poses.maxDigHeight = solvePose(p, R.alpha[1], R.delta[1], bucket.curl);
+    poses.maxDigHeight = solvePose(p, R.alpha[1], R.delta[1], bucket.retracted);
     values.maxDigHeight = poses.maxDigHeight.T.y;
     notes.push('姿态：动臂仰角最大、斗杆油缸全缩、铲斗油缸全缩（斗齿尖朝上）');
 
@@ -159,27 +157,5 @@ export function computeMetrics(p) {
     notes.push('姿态：动臂仰角最大、斗杆油缸全缩，斗杆–铲斗铰点与斗齿尖连线竖直（斗齿尖在铰点正下方）');
   }
 
-  /* ---------- 最大垂直挖掘深度 E：斗底贴垂直壁面 ---------- */
-  {
-    // 斗底（铲斗平底）与 C→T 连线的夹角为 bucketBottomAngle。
-    // 斗底竖直时 C→T 的绝对方向角为 (bucketBottomAngle − 90°)，
-    // 在该约束下最小化斗齿尖 y 坐标即得最大垂直挖掘深度。
-    const psiAbs = p.bucketBottomAngle - 90;
-    let best = null;
-    for (let i = 0; i <= 720; i++) {
-      const alpha = R.alpha[0] + ((R.alpha[1] - R.alpha[0]) * i) / 720;
-      const gammaMin = alpha + R.delta[0];
-      const gammaMax = alpha + R.delta[1];
-      // sin 在 [−90°, 90°] 上单调递增；γ 的最优取值是 −90° 被夹到可行区间内
-      const gamma = clamp(-90, gammaMin, gammaMax);
-      const y = p.pivotY + p.boomLength * Math.sin(toRad(alpha)) + p.armLength * Math.sin(toRad(gamma));
-      if (!best || y < best.y) best = { y, alpha, gamma };
-    }
-    values.verticalWallDepth = -(best.y + p.bucketRadius * Math.sin(toRad(psiAbs)));
-    const delta = best.gamma - best.alpha;
-    poses.verticalWallDepth = solvePose(p, best.alpha, delta, psiAbs - (best.alpha + delta));
-    notes.push('姿态：斗底竖直贴壁切削，斗齿尖在壁面底部');
-  }
-
-  return { values, poses, notes, warnings, ranges: { ...R, curl: bucket.curl, dump: bucket.dump } };
+  return { values, poses, notes, warnings, ranges: { ...R, ...bucket } };
 }

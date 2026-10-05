@@ -19,7 +19,6 @@
  *   ④ 最大挖掘高度 H = pivotY + L1·sinαmax + L2·sin(αmax+Δmax) + R3
  *        ③④ 联立可解出 pivotY 与 Δmax（对 Δmax 做一维求根）
  *   ⑤ 最大挖掘深度 D = L2 + R3 − pivotY − L1·sinαmin  → 解出 αmin
- *   ⑥ 最大垂直挖掘深度 V → 解出斗底安装角
  *
  * 只剩 αmax 一个自由参数（4 个方程、5 个未知量），
  * 因此对 αmax 扫描，再按「铰点位置是否合理」挑最优解。
@@ -118,19 +117,6 @@ function plausibility(base, s) {
   return pen;
 }
 
-/** 由标称的最大垂直挖掘深度反解斗底安装角 */
-function solveBottomAngle(base, params, targetV) {
-  // 在该姿态下：depth = −(pivotY + L1·sinα + L2·sinγ + R3·sin(ψabs))，ψabs = 斗底角 − 90
-  const alpha = params.boomAngleMin;
-  const delta = clamp(-90 - alpha, params.armRelMin, params.armRelMax);
-  const gamma = alpha + delta;
-  const yC =
-    params.pivotY + params.boomLength * Math.sin(toRad(alpha)) + params.armLength * Math.sin(toRad(gamma));
-  const sinPsi = (-targetV - yC) / params.bucketRadius;
-  if (Math.abs(sinPsi) > 1) return null;
-  return toDeg(Math.asin(sinPsi)) + 90;
-}
-
 /** 关节角字段已从机型参数移到 calibration（角度是派生量，不再是输入项） */
 const CAL_KEYS = new Set(['boomAngleMin', 'boomAngleMax', 'armRelMin', 'armRelMax']);
 const seedOf = (m, k) => (CAL_KEYS.has(k) ? m.calibration?.[k] : m[k]);
@@ -182,11 +168,6 @@ function fit(machine) {
       boomAngleMin: Number(cand.alphaMinDeg.toFixed(2)),
       armRelMax: Number(cand.deltaMax.toFixed(2)),
     };
-    if (t.verticalWallDepth != null) {
-      const bba = solveBottomAngle(machine, p, t.verticalWallDepth);
-      if (bba != null && bba >= 20 && bba <= 100) p.bucketBottomAngle = Number(bba.toFixed(2));
-    }
-
     // 关键一步：关节角在本模型里是派生量，直接算指标只会读到机型原有的油缸数据，
     // 拟合结果根本不会生效。必须先由目标角度折算出三个油缸与四连杆，再评估指标。
     // reuseBucket：复用现成连杆、跳过四连杆搜索（那要跑约 24 万次评估，而拟合要试
@@ -239,7 +220,7 @@ function fit(machine) {
   console.log('  {');
   console.log(`    id: '${machine.id}',`);
   console.log(`    name: '${machine.name}',`);
-  for (const k of ['boomLength', 'armLength', 'bucketRadius', 'pivotX', 'pivotY', 'bucketBottomAngle', 'boomBend']) {
+  for (const k of ['boomLength', 'armLength', 'bucketRadius', 'pivotX', 'pivotY', 'boomBend']) {
     if (k in p) console.log(`    ${k}: ${typeof p[k] === 'number' ? Number(p[k].toFixed(4)) : JSON.stringify(p[k])},`);
   }
   console.log('    calibration: {');

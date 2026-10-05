@@ -29,7 +29,7 @@
  */
 
 import { solvePose, toDeg, toRad, RAD, bucketLocalShape } from './geometry.js';
-import { jointRanges } from './params.js';
+import { jointRanges } from './params.js?v=20261005c';
 
 const lerpRange = ([lo, hi], i, n) => (n <= 1 ? lo : lo + ((hi - lo) * i) / (n - 1));
 
@@ -142,7 +142,7 @@ export function computeEnvelope(p, opts = {}) {
   const A = { x: p.pivotX, y: p.pivotY };
   const [aMin, aMax] = r.alpha;
   const [dMin, dMax] = r.delta; // 斗杆缸全缩 → Δmax（伸出 = 收拢 = Δ 减小）
-  const [pMin, pMax] = r.psi; // 铲斗缸全缩 → 收斗 → ψ 最大
+  const [pMin, pMax] = r.psi; // 标准布置：全伸收斗 → ψ 最小，全缩开斗 → ψ 最大
   const stepDeg = Math.max(0.1, opts.stepDeg ?? 0.75);
   const tol = opts.tol ?? 1;
 

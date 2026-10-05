@@ -7,9 +7,9 @@
  * 既用于页面下方的"参数表"页签，也用于打印 PDF 的第二页。
  */
 
-import { PARAM_SPEC, PARAM_GROUPS, bucketRotationRange, jointRanges } from '../core/params.js?v=20261005b';
-import { boomCylBodyPoint, armRodPerpSpan, verifyCylinderLayout } from '../core/cylinders.js';
-import { METRIC_META } from '../core/metrics.js';
+import { PARAM_SPEC, PARAM_GROUPS, bucketRotationRange, jointRanges } from '../core/params.js?v=20261005c';
+import { boomCylBodyPoint, armRodPerpSpan, verifyCylinderLayout } from '../core/cylinders.js?v=20261005c';
+import { METRIC_META } from '../core/metrics.js?v=20261005c';
 
 const mm = (v) => Math.round(v).toLocaleString('en-US');
 
@@ -111,8 +111,8 @@ export function renderSpecTables(p, values, poses, opts = {}) {
         <tr><td>动臂仰角 α</td><td class="num">${f2(R.alpha[0])}</td><td class="num">${f2(R.alpha[1])}</td><td>°</td></tr>
         <tr><td>斗杆相对转角 Δ</td><td class="num">${f2(R.delta[0])}</td><td class="num">${f2(R.delta[1])}</td><td>°</td></tr>
         <tr><td>铲斗相对转角 ψ</td><td class="num">${f2(b.min)}</td><td class="num">${f2(b.max)}</td><td>°</td></tr>
-        <tr><td>收斗位 ψ收（铲斗油缸全缩）</td><td class="num" colspan="2" style="text-align:center">${f2(b.curl)}</td><td>°</td></tr>
-        <tr><td>卸料位 ψ卸（铲斗油缸全伸）</td><td class="num" colspan="2" style="text-align:center">${f2(b.dump)}</td><td>°</td></tr>
+        <tr><td>收斗位 ψ收（铲斗油缸全伸）</td><td class="num" colspan="2" style="text-align:center">${f2(b.curl)}</td><td>°</td></tr>
+        <tr><td>开斗位 ψ开（铲斗油缸全缩）</td><td class="num" colspan="2" style="text-align:center">${f2(b.dump)}</td><td>°</td></tr>
       </tbody>
     </table>`;
 
@@ -163,8 +163,8 @@ export function renderSpecTables(p, values, poses, opts = {}) {
     '关节角范围不是输入项：它由动臂油缸、斗杆油缸、铲斗油缸的「安装位置 + 安装距 + 行程」经连杆机构反解得到。改写油缸数据，角度与作业尺寸会同步变化。',
     '铰点坐标口径与真机图纸一致：动臂油缸缸筒端以「相对动臂铰点 A 的 ΔX/ΔY」给出（一般 ΔX>0、ΔY<0）；斗杆油缸缸筒端用动臂坐标、活塞杆端用斗杆坐标（真机在 B 点后方、斗杆上平面，即沿斗杆为负、垂直斗杆为正）；铲斗油缸与摇杆铰点都在斗杆上方（垂直斗杆为正）。',
     '铲斗采用标准的「斗杆–摇杆–连杆–铲斗」四连杆：摇杆与连杆都是两铰点杆，摇杆一端铰在斗杆的 D 点，另一端与铲斗油缸活塞杆、连杆共用一个销轴；连杆另一端铰在铲斗背板的 E 点。参数在「铲斗油缸与四连杆」组里。',
-    '伸出方向由安装几何决定：动臂油缸伸出 → 抬起；斗杆油缸伸出 → 收拢（挖掘方向）；铲斗油缸全缩 → 收斗、全伸 → 卸料。自检表会逐条校验，改出装不上的组合会在参数面板给出提示。',
-    '各指标均按国标姿态定义计算：最大挖掘深度取斗杆两铰点与斗齿尖三点共线且垂直停机面；最大挖掘高度取动臂仰角最大、斗杆与铲斗油缸全缩；最大卸载高度取同一姿态下斗齿尖垂直向下；最大挖掘半径取整链伸直且平行停机面；停机面最大挖掘半径取整链伸直且斗齿尖触地；最大垂直挖掘深度取斗底贴壁切削。',
+    '伸出方向由安装几何决定：动臂油缸伸出 → 抬起；斗杆油缸伸出 → 收拢（挖掘方向）；铲斗油缸伸出 → 收斗、缩回 → 开斗。自检表会逐条校验，改出装不上的组合会在参数面板给出提示。',
+    '各指标均按国标姿态定义计算：最大挖掘深度取斗杆两铰点与斗齿尖三点共线且垂直停机面；最大挖掘高度取动臂仰角最大、斗杆与铲斗油缸全缩；最大卸载高度取同一姿态下斗齿尖垂直向下；最大挖掘半径取整链伸直且平行停机面；停机面最大挖掘半径取整链伸直且斗齿尖触地。',
     '油缸与连杆尺寸是标定得到的示例值（厂家样本不公开这些数据），拿到真机图纸后直接覆盖即可。表中「厂家标称」仅为对标参考，不参与几何计算。',
   ];
 

@@ -210,14 +210,14 @@ test('包络对参数单调：斗杆加长后挖掘深度必定加深', () => {
   ];
   const longer = { ...base, armLength: base.armLength * k };
   for (const key of armKeys) longer[key] = base[key] * k;
-  const psiCurl = 90 - (cal.boomAngleMax + cal.armRelMax);
+  const psiRetracted = 90 - (cal.boomAngleMax + cal.armRelMax);
   const cyl = arm.calibrateCylinders(longer, {
     alphaMin: cal.boomAngleMin,
     alphaMax: cal.boomAngleMax,
     deltaMin: cal.armRelMin,
     deltaMax: cal.armRelMax,
-    psiCurl,
-    psiDump: psiCurl - 180,
+    psiRetracted,
+    psiExtended: psiRetracted - 180,
   });
   Object.assign(longer, cyl);
 

@@ -52,8 +52,8 @@ test('滑块量程端点 = 关节角的行程端点', () => {
       ['boom', boomCylLength(m, R.alphaMax), m.boomCylClosed + m.boomCylStroke],
       ['arm', armCylLength(m, R.deltaMax), m.armCylClosed],
       ['arm', armCylLength(m, R.deltaMin), m.armCylClosed + m.armCylStroke],
-      ['bkt', bucketCylLength(m, R.psiCurl), m.bktCylClosed],
-      ['bkt', bucketCylLength(m, R.psiDump), m.bktCylClosed + m.bktCylStroke],
+      ['bkt', bucketCylLength(m, R.psiRetracted), m.bktCylClosed],
+      ['bkt', bucketCylLength(m, R.psiExtended), m.bktCylClosed + m.bktCylStroke],
     ];
     for (const [kind, got, want] of cases) {
       assert.ok(Math.abs(got - want) < 1, `${m.id}/${kind}: ${got.toFixed(1)} vs ${want.toFixed(1)}`);

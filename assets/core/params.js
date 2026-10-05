@@ -15,7 +15,7 @@
  */
 
 import { clamp } from './geometry.js';
-import { resolveJointRanges, verifyCylinderLayout } from './cylinders.js';
+import { resolveJointRanges, verifyCylinderLayout } from './cylinders.js?v=20261005c';
 
 /**
  * 界面控件元数据。group 决定参数面板分组，order 决定组内顺序。
@@ -43,8 +43,6 @@ export const PARAM_SPEC = [
     decimals: 2, hint: '仅用于参数表显示，不参与几何计算' },
   { key: 'boomBend', group: '工作装置几何', label: '动臂弯折量', unit: 'mm', min: 0, max: 1500, step: 10, kind: 'length', primary: false,
     hint: '动臂中部相对两端连线的偏移，只影响绘图观感，不参与计算' },
-  { key: 'bucketBottomAngle', group: '工作装置几何', label: '斗底安装角', unit: '°', min: 20, max: 100, step: 0.5, kind: 'angle', primary: false,
-    hint: '铲斗平底相对「销轴→斗齿尖」连线的夹角，用于确定最大垂直挖掘深度姿态' },
 
   // ---- 铰点位置 ----
   { key: 'pivotX', group: '铰点位置', label: '动臂铰点前移量', unit: 'mm', min: -800, max: 1800, step: 5, kind: 'length', primary: true,
@@ -100,7 +98,7 @@ export const PARAM_SPEC = [
   { key: 'bktBranch', group: '铲斗油缸与四连杆', label: '连杆装配侧', unit: '', min: -1, max: 1, step: 2, kind: 'number', decimals: 0, primary: false,
     hint: '四连杆圆交点的两支装配方案，+1 或 −1；选错会让铲斗转向反掉' },
   { key: 'bktCylClosed', group: '铲斗油缸与四连杆', label: '安装距（全缩）', unit: 'mm', min: 300, max: 5000, step: 5, kind: 'length', primary: true,
-    hint: '油缸全缩时两铰点中心距（全缩 = 卸料位）' },
+    hint: '油缸全缩时两铰点中心距（标准布置下为开斗端点）' },
   { key: 'bktCylStroke', group: '铲斗油缸与四连杆', label: '行程', unit: 'mm', min: 100, max: 3000, step: 5, kind: 'length', primary: true,
     hint: '决定铲斗相对转角范围；伸出 → 收斗（挖掘方向）' },
 
@@ -243,7 +241,7 @@ export function validateParams(p) {
     );
   }
 
-  // 最大挖掘高度 / 卸载高度姿态：铲斗油缸全伸时斗齿尖应朝上（收斗），全缩时应能转到朝下（卸料）
+  // 卸载高度按斗齿尖竖直朝下的几何姿态检查，与收斗/开斗动作端点名称无关。
   const psiForDump = -90 - (r.alphaMax + r.deltaMax);
   if (psiForDump < r.psiMin - 5e-3 || psiForDump > r.psiMax + 5e-3) {
     warnings.push(
@@ -267,12 +265,16 @@ export function validateParams(p) {
 
 /**
  * 铲斗相对转角的合法区间 —— 现已完全由铲斗油缸 + 四连杆解出。
- * curl = 铲斗油缸全缩（收斗，最大挖掘高度姿态用）
- * dump = 铲斗油缸全伸（卸料）
+ * curl/dump 按顺时针收斗/逆时针开斗定义；标准布置下分别为全伸/全缩。
+ * retracted/extended 独立表示全缩/全伸端点，供几何指标按实际缸长取姿态。
  */
 export function bucketRotationRange(p) {
   const r = resolveJointRanges(p);
-  return { curl: r.psiCurl, dump: r.psiDump, min: r.psiMin, max: r.psiMax };
+  return {
+    curl: r.psiCurl, dump: r.psiDump,
+    retracted: r.psiRetracted, extended: r.psiExtended,
+    min: r.psiMin, max: r.psiMax,
+  };
 }
 
 /** 每个关节的可达区间，供包络采样与指标计算使用 */

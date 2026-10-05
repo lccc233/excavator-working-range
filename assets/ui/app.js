@@ -10,22 +10,18 @@
  * 渲染管线：输入 → (rAF) → 校验 → 指标 → 包络 → 最小回转半径 → SVG 字符串
  */
 
-import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.js?v=20261005b';
-import { validateParams } from '../core/params.js?v=20261005b';
-import { computeMetrics } from '../core/metrics.js';
-import { computeDiggingForces } from '../core/forces.js?v=20261005b';
-import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js';
-import { decodeParams, encodeParams } from '../core/share.js?v=20261005b';
-// ?v= 发版戳：这两个模块改过，而老访客的浏览器可能还攥着 7 天缓存的旧副本
-// （资源文件名不带内容指纹，浏览器在自己的 max-age 到期前不会回源）。
-// 换一个没见过的 URL 才能把它们拉过来；线上缓存已改为 5 分钟，
-// 带 ?v= 的 URL 同样每 5 分钟回源校验，所以这个戳不必每次发版都改。
-// 其余 import 的文件本次未改动，不需要加。
-import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005a';
+import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.js?v=20261005c';
+import { validateParams } from '../core/params.js?v=20261005c';
+import { computeMetrics } from '../core/metrics.js?v=20261005c';
+import { computeDiggingForces } from '../core/forces.js?v=20261005c';
+import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261005c';
+import { decodeParams, encodeParams } from '../core/share.js?v=20261005c';
+// 本次改动的入口及依赖统一使用发版戳，避免旧缓存混用指标和油缸端点定义。
+import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005c';
 import { createChartZoom } from './zoom.js?v=20261005a';
-import { renderSchematicFigure } from './schematic.js';
-import { createControls } from './controls.js?v=20261005b';
-import { renderSpecTables, renderPrintHeader } from './chart-table.js?v=20261005b';
+import { renderSchematicFigure } from './schematic.js?v=20261005c';
+import { createControls } from './controls.js?v=20261005c';
+import { renderSpecTables, renderPrintHeader } from './chart-table.js?v=20261005c';
 import { exportPng, exportSvg, copyText, safeFilename } from './exporter.js';
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +40,8 @@ const el = {
   forceSummary: $('forceSummary'),
   forceBucketValue: $('forceBucketValue'),
   forceArmValue: $('forceArmValue'),
+  forceBucketDirection: $('forceBucketDirection'),
+  forceArmDirection: $('forceArmDirection'),
   poseHint: $('poseHint'),
   zoomLevel: $('zoomLevel'),
 };
@@ -60,7 +58,6 @@ const DEFAULT_DIM_KEYS = [
   'maxDigHeight',
   'dumpHeight',
   'maxDigDepth',
-  'verticalWallDepth',
   'minSwingRadius',
 ];
 
@@ -146,6 +143,8 @@ function syncForceSummary() {
   if (!force) return;
   el.forceBucketValue.textContent = force.bucketCurlKN.toFixed(1);
   el.forceArmValue.textContent = force.armCrowdKN.toFixed(1);
+  el.forceBucketDirection.textContent = force.bucketCylinderDirection === 'extend' ? '油缸伸出' : '油缸缩回';
+  el.forceArmDirection.textContent = force.armCylinderDirection === 'extend' ? '油缸伸出' : '油缸缩回';
 }
 
 /* ------------------------------------------------------------------ *

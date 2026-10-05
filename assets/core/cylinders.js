@@ -27,7 +27,7 @@
  * ---------------------------------------------------------------
  *   动臂油缸伸出 → 动臂抬起（α 增大）
  *   斗杆油缸伸出 → 斗杆向内收拢（Δ 减小，即挖掘方向）
- *   铲斗油缸全缩 → 收斗（ψ 增大，最大挖掘高度方向）；全伸 → 卸料
+ *   铲斗油缸伸出 → 收斗（ψ 减小，顺时针）；缩回 → 开斗
  *   三者都由安装几何唯一决定，verifyCylinderLayout() 会逐条校验，
  *   界面上的「行程/安装距」比例也一并检查，防止调出装不上的机构。
  *
@@ -453,9 +453,8 @@ export function cylinderPose(p, pose) {
   };
 
   // 铲斗四连杆：全部先在斗杆坐标系里解，再统一搬到整机坐标。
-  // ⚠️ 指标姿态里有一个「斗底贴壁」姿态（ψ = 斗底安装角），它可能超出铲斗油缸
-  //    能驱动的 ψ 区间——那是几何定义姿态、不是可达姿态。绘图时把 ψ 收到
-  //    机构能装上的极限，避免图上出现「装不上的连杆」。
+  // 外部传入的姿态可能超出四连杆可装配范围；绘图时取最近可装配角，
+  // 挖掘力计算另行严格检查当前姿态的关节范围和油缸行程。
   const g = bucketLinkageGeom(p);
   const assembleAt = (psi) => {
     const E = rot(g.C, toRad(psi), g.e.x, g.e.y);
@@ -540,7 +539,7 @@ export function clearRangeCache() {
  * 这是整个模型里唯一的关节角来源——metrics / envelope 都从这里取，
  * 保证不会出现「油缸说一套、角度说另一套」的自相矛盾。
  *
- * @returns {{alphaMin,alphaMax,deltaMin,deltaMax,psiMin,psiMax,psiCurl,psiDump}}
+ * @returns {{alphaMin,alphaMax,deltaMin,deltaMax,psiMin,psiMax,psiRetracted,psiExtended,psiCurl,psiDump}}
  */
 export function resolveJointRanges(p) {
   const key = RANGE_CACHE_KEYS.map((k) => p[k]).join('|');
@@ -559,18 +558,21 @@ export function resolveJointRanges(p) {
   const alphaMax = Math.max(a1, a2);
   const deltaMin = Math.min(d1, d2);
   const deltaMax = Math.max(d1, d2);
-  const psiCurl = bucketPsiFromLength(p, p.bktCylClosed); // 铲斗油缸全缩 → 收斗
-  const psiDump = bucketPsiFromLength(p, p.bktCylClosed + p.bktCylStroke); // 全伸 → 卸料
+  const psiRetracted = bucketPsiFromLength(p, p.bktCylClosed);
+  const psiExtended = bucketPsiFromLength(p, p.bktCylClosed + p.bktCylStroke);
 
   const out = {
     alphaMin,
     alphaMax,
     deltaMin,
     deltaMax,
-    psiCurl,
-    psiDump,
-    psiMin: Math.min(psiCurl, psiDump),
-    psiMax: Math.max(psiCurl, psiDump),
+    psiRetracted,
+    psiExtended,
+    // 收斗是顺时针（ψ 减小）；单独保留缸长端点，避免几何指标依赖动作名称。
+    psiCurl: Math.min(psiRetracted, psiExtended),
+    psiDump: Math.max(psiRetracted, psiExtended),
+    psiMin: Math.min(psiRetracted, psiExtended),
+    psiMax: Math.max(psiRetracted, psiExtended),
   };
   if (rangeCache.size >= RANGE_CACHE_MAX) rangeCache.clear();
   rangeCache.set(key, out);
@@ -584,7 +586,7 @@ export function resolveJointRanges(p) {
  * 约定：安装距 = 全缩长度（两端中较短的那个），行程 = 两端之差。
  *   动臂：全缩 → 动臂最低（αmin）；全伸 → 仰角最大（αmax）
  *   斗杆：全缩 → 斗杆最外伸（Δmax）；全伸 → 斗杆收拢（Δmin）   ← 伸出即收斗杆
- *   铲斗：全缩 → 卸料（ψ卸）；全伸 → 收斗（ψ收）               ← 伸出即收斗
+ *   铲斗：psiRetracted/psiExtended 明确表示全缩/全伸目标角；标准布置为缩回开斗、伸出收斗。
  * 这里统一取 min/max，避免任一机构的正负号约定不同时算出负行程。
  */
 export function calibrateCylinders(p, targets) {
@@ -592,8 +594,8 @@ export function calibrateCylinders(p, targets) {
   const boomB = boomCylLength(p, targets.alphaMax);
   const armA = armCylLength(p, targets.deltaMin);
   const armB = armCylLength(p, targets.deltaMax);
-  const bktA = bucketCylLength(p, targets.psiCurl);
-  const bktB = bucketCylLength(p, targets.psiDump);
+  const bktA = bucketCylLength(p, targets.psiRetracted);
+  const bktB = bucketCylLength(p, targets.psiExtended);
 
   return {
     boomCylClosed: round1(Math.min(boomA, boomB)),
@@ -692,13 +694,13 @@ export function verifyCylinderLayout(p) {
   const boomOpen = boomCylLength(p, R.alphaMax);
   const armClosed = armCylLength(p, R.deltaMax);
   const armOpen = armCylLength(p, R.deltaMin);
-  const bktClosed = bucketCylLength(p, R.psiCurl); // 全缩 = 收斗
-  const bktOpen = bucketCylLength(p, R.psiDump); // 全伸 = 卸料
+  const bktClosed = bucketCylLength(p, R.psiRetracted);
+  const bktOpen = bucketCylLength(p, R.psiExtended);
   add('boomDir', '动臂油缸伸出 → 动臂抬起', boomOpen > boomClosed,
     `${boomClosed.toFixed(0)} → ${boomOpen.toFixed(0)} mm`);
   add('armDir', '斗杆油缸伸出 → 斗杆收拢（挖掘方向）', armOpen > armClosed,
     `${armClosed.toFixed(0)} → ${armOpen.toFixed(0)} mm`);
-  add('bktDir', '铲斗油缸全缩 → 收斗（挖掘方向）', bktOpen > bktClosed,
+  add('bktDir', '铲斗油缸伸出 → 收斗（ψ 减小，挖掘方向）', R.psiExtended < R.psiRetracted,
     `全缩 ${bktClosed.toFixed(0)} / 全伸 ${bktOpen.toFixed(0)} mm`);
 
   // ④ 行程 / 安装距比例（动臂油缸本身偏小，下限放宽到 15%）

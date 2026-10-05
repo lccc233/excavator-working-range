@@ -11,11 +11,11 @@
  * 绘制时统一经 makeTransform 映射到像素；文字不参与缩放，始终保持可读字号。
  */
 
-import { METRIC_META } from '../core/metrics.js';
+import { METRIC_META } from '../core/metrics.js?v=20261005c';
 import { solvePose, toRad, bodyPolygons, attachmentPolygons, armHeelAlong } from '../core/geometry.js';
-import { bucketRotationRange, jointRanges } from '../core/params.js';
-import { cylinderPose, boomCylLength, armCylLength, bucketCylLength, boomAngleFromLength, armDeltaFromLength, bucketPsiFromLength } from '../core/cylinders.js';
-import { schematicModel, drawSchematic, drawSchematicBase, schematicLegend } from './schematic.js';
+import { bucketRotationRange, jointRanges } from '../core/params.js?v=20261005c';
+import { cylinderPose, boomCylLength, armCylLength, bucketCylLength, boomAngleFromLength, armDeltaFromLength, bucketPsiFromLength } from '../core/cylinders.js?v=20261005c';
+import { schematicModel, drawSchematic, drawSchematicBase, schematicLegend } from './schematic.js?v=20261005c';
 
 const FONT = `system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif`;
 
@@ -692,12 +692,6 @@ export function renderChart(o) {
     if (show('maxDigDepth')) {
       const t = tip('maxDigDepth');
       dims.push(dimV(T, t.x, 0, -values.maxDigDepth, '#dc2626', 'B 最大挖掘深度', mm(values.maxDigDepth), 'left', W));
-    }
-    if (show('verticalWallDepth')) {
-      const t = tip('verticalWallDepth');
-      dims.push(
-        dimV(T, t.x, 0, -values.verticalWallDepth, '#7c3aed', 'E 最大垂直挖掘深度', mm(values.verticalWallDepth), 'right', W),
-      );
     }
     if (show('groundMaxRadius')) {
       const y = -110;

@@ -208,7 +208,7 @@ test('三个油缸的缸长在各自行程内严格单调', () => {
     dir = 0;
     prev = null;
     for (let i = 0; i <= 200; i++) {
-      const L = bucketCylLength(m, R.psiDump + ((R.psiCurl - R.psiDump) * i) / 200);
+      const L = bucketCylLength(m, R.psiExtended + ((R.psiRetracted - R.psiExtended) * i) / 200);
       if (prev != null) {
         const s = Math.sign(L - prev);
         if (!dir) dir = s;
@@ -219,12 +219,12 @@ test('三个油缸的缸长在各自行程内严格单调', () => {
   }
 });
 
-test('真机关系：铲斗油缸全缩位即收斗位（缸长较短）', () => {
+test('真机关系：铲斗油缸全伸位即收斗位（缸长较长）', () => {
   for (const m of PRESETS) {
     const b = bucketRotationRange(m);
     assert.ok(
-      bucketCylLength(m, b.curl) < bucketCylLength(m, b.dump),
-      `${m.id}: 收斗位缸长应短于卸料位`,
+      bucketCylLength(m, b.curl) > bucketCylLength(m, b.dump),
+      `${m.id}: 收斗位缸长应长于开斗位`,
     );
   }
 });
@@ -238,9 +238,9 @@ test('安装距 / 行程 与标定目标角一致（误差 < 0.1°）', () => {
     assert.ok(Math.abs(R.alphaMax - cal.boomAngleMax) < 0.1, `${m.id} αmax`);
     assert.ok(Math.abs(R.deltaMin - cal.armRelMin) < 0.1, `${m.id} Δmin`);
     assert.ok(Math.abs(R.deltaMax - cal.armRelMax) < 0.1, `${m.id} Δmax`);
-    const psiCurl = 90 - (cal.boomAngleMax + cal.armRelMax);
-    assert.ok(Math.abs(R.psiCurl - psiCurl) < 0.1, `${m.id} ψ收`);
-    assert.ok(Math.abs(R.psiDump - (psiCurl - 180)) < 0.1, `${m.id} ψ卸`);
+    const psiRetracted = 90 - (cal.boomAngleMax + cal.armRelMax);
+    assert.ok(Math.abs(R.psiRetracted - psiRetracted) < 0.1, `${m.id} ψ缩`);
+    assert.ok(Math.abs(R.psiExtended - (psiRetracted - 180)) < 0.1, `${m.id} ψ伸`);
   }
 });
 
@@ -252,8 +252,8 @@ test('calibrateCylinders 由目标角反算出的安装距与行程有效', () =
     alphaMax: cal.boomAngleMax,
     deltaMin: cal.armRelMin,
     deltaMax: cal.armRelMax,
-    psiCurl: 90 - (cal.boomAngleMax + cal.armRelMax),
-    psiDump: 90 - (cal.boomAngleMax + cal.armRelMax) - 180,
+    psiRetracted: 90 - (cal.boomAngleMax + cal.armRelMax),
+    psiExtended: 90 - (cal.boomAngleMax + cal.armRelMax) - 180,
   });
   for (const [k, v] of Object.entries(cyl)) {
     assert.ok(Number.isFinite(v) && v > 0, `${k} = ${v}`);
@@ -327,7 +327,7 @@ test('布置口径：缸筒端/活塞杆端坐标符号符合真机约定', () =
   }
 });
 
-test('伸出方向：动臂抬起 / 斗杆收拢 / 铲斗全缩收斗', () => {
+test('伸出方向：动臂抬起 / 斗杆收拢 / 铲斗伸出收斗', () => {
   for (const m of PRESETS) {
     clearRangeCache();
     const R = resolveJointRanges(m);
@@ -341,11 +341,11 @@ test('伸出方向：动臂抬起 / 斗杆收拢 / 铲斗全缩收斗', () => {
       armCylLength(m, R.deltaMin) > armCylLength(m, R.deltaMax),
       `${m.id}: 斗杆油缸伸出应收拢斗杆`,
     );
-    // 铲斗：全缩 → 收斗
+    // 铲斗：全伸 → 收斗
     const b = bucketRotationRange(m);
     assert.ok(
-      bucketCylLength(m, b.curl) < bucketCylLength(m, b.dump),
-      `${m.id}: 铲斗油缸全缩应为收斗位（缸长较短）`,
+      bucketCylLength(m, b.curl) > bucketCylLength(m, b.dump),
+      `${m.id}: 铲斗油缸全伸应为收斗位（缸长较长）`,
     );
   }
 });

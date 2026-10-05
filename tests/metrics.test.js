@@ -56,7 +56,6 @@ test('20 吨级机型 逐项对标（权威回归基线）', () => {
     maxDigDepth: 6600,
     maxDigHeight: 9570,
     dumpHeight: 6700,
-    verticalWallDepth: 5800,
   };
   for (const [k, v] of Object.entries(expect)) {
     assert.ok(Math.abs(values[k] - v) / v < 0.005, `${k}: ${values[k].toFixed(1)} 应接近 ${v}`);
@@ -145,7 +144,7 @@ test('最大挖掘高度姿态使用动臂、斗杆和铲斗的行程端点', ()
     const pose = poses.maxDigHeight;
     assert.ok(Math.abs(pose.alphaDeg - ranges.alpha[1]) < 1e-9, `${m.id}: 动臂应在全伸端点`);
     assert.ok(Math.abs(pose.deltaDeg - ranges.delta[1]) < 1e-9, `${m.id}: 斗杆应在全缩端点`);
-    assert.ok(Math.abs(pose.psiDeg - ranges.curl) < 1e-9, `${m.id}: 铲斗应在全缩收斗端点`);
+    assert.ok(Math.abs(pose.psiDeg - ranges.retracted) < 1e-9, `${m.id}: 铲斗应在全缩端点`);
     assert.ok(Number.isFinite(pose.T.x) && Number.isFinite(pose.T.y), `${m.id}: 斗齿坐标必须有限`);
   }
 });
@@ -232,6 +231,16 @@ test('METRIC_META 与计算输出键一致', () => {
     assert.ok(meta.label && meta.symbol && meta.color);
   }
   assert.deepEqual(METRIC_KEYS, METRIC_META.map((m) => m.key));
+});
+
+test('仅保留五项作业尺寸，预设和姿态不再包含垂直贴壁指标', () => {
+  assert.equal(METRIC_KEYS.length, 5);
+  for (const p of PRESETS) {
+    const { values, poses } = computeMetrics(p);
+    assert.deepEqual(Object.keys(values).sort(), [...METRIC_KEYS].sort());
+    assert.deepEqual(Object.keys(poses).sort(), [...METRIC_KEYS].sort());
+    assert.ok(!Object.hasOwn(p.nominal, 'verticalWallDepth'));
+  }
 });
 
 test('极端但合法的参数下指标不产生 NaN / Infinity', () => {

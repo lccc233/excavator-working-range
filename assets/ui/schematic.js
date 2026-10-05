@@ -18,7 +18,7 @@
  *         所以不同机型、不同缩放下简图的线条粗细都一致，看着像一张工程图。
  */
 
-import { cylinderPose } from '../core/cylinders.js';
+import { cylinderPose } from '../core/cylinders.js?v=20261005c';
 
 const INK = '#0f172a';
 const BAR = '#334155';

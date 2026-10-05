@@ -9,6 +9,13 @@ import { encodeParams, decodeParams, buildShareUrl, matchPreset, SHORT_KEYS, LON
 import { PRESETS, clonePreset, defaultParams } from '../assets/core/presets.js';
 import { PARAM_SPEC } from '../assets/core/params.js';
 
+test('旧链接中的斗底安装角字段被忽略，其他参数仍能还原', () => {
+  const p = decodeParams('m=x20t&ba=63.74&bl=5800');
+  assert.equal(p.boomLength, 5800);
+  assert.ok(!Object.hasOwn(p, 'bucketBottomAngle'));
+  assert.ok(!new URLSearchParams(encodeParams(p)).has('ba'));
+});
+
 test('短键映射是双射且覆盖全部参数', () => {
   for (const spec of PARAM_SPEC) {
     assert.ok(SHORT_KEYS[spec.key], `参数 ${spec.key} 缺少短键`);

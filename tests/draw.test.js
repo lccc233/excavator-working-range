@@ -259,7 +259,6 @@ function renderFor(preset, overrides = {}) {
         'maxDigHeight',
         'dumpHeight',
         'maxDigDepth',
-        'verticalWallDepth',
         'minSwingRadius',
         'maxDigRadius',
       ],
@@ -291,7 +290,7 @@ test('每个机型渲染出的 SVG 都是良构 XML', () => {
 });
 
 test('各种姿态模式下渲染出的 SVG 都是良构 XML', () => {
-  for (const mode of ['custom', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'groundMaxRadius', 'none']) {
+  for (const mode of ['custom', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'groundMaxRadius', 'none']) {
     for (const m of PRESETS) {
       const problems = scanXmlWellFormed(renderFor(m, { poseMode: mode }));
       assert.equal(problems.length, 0, `${m.id}/${mode}: ${problems.join(' | ')}`);
@@ -331,7 +330,6 @@ test('图上尺寸标注的数值与计算结果一致', () => {
       ['maxDigHeight', '最大挖掘高度'],
       ['dumpHeight', '最大卸载高度'],
       ['maxDigDepth', '最大挖掘深度'],
-      ['verticalWallDepth', '最大垂直挖掘深度'],
       ['groundMaxRadius', '停机面最大挖掘半径'],
     ]) {
       assert.ok(svg.includes(label), `${m.id}: 缺少标注「${label}」`);
@@ -363,7 +361,7 @@ test('不同画布尺寸下都能渲染且良构', () => {
         showTailCircle: true,
         poseMode: 'custom',
         customPose: {},
-        dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'verticalWallDepth', 'minSwingRadius'],
+        dimKeys: ['groundMaxRadius', 'maxDigHeight', 'dumpHeight', 'maxDigDepth', 'minSwingRadius'],
       },
       minSwingRadius: computeMinSwingRadius(m),
     });
