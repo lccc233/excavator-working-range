@@ -90,13 +90,6 @@ export function computeMetrics(p) {
   const ac = acChain(p);
   const Lchain = ac.chainLen;
 
-  if (ac.deltaMax < -1e-6) {
-    warnings.push(
-      `斗杆相对转角上限为 ${ac.deltaMax.toFixed(1)}°，工作装置无法完全伸直，` +
-        '「最大挖掘半径 / 停机面最大挖掘半径」按实际最直姿态计算，与国标共线定义存在偏差',
-    );
-  }
-
   /* ---------- 最大挖掘半径 A：整链水平 ---------- */
   {
     const value = p.pivotX + Lchain;
