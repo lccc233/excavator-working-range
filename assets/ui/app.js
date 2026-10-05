@@ -12,16 +12,16 @@
 
 import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.js?v=20261005c';
 import { validateParams } from '../core/params.js?v=20261005c';
-import { computeMetrics } from '../core/metrics.js?v=20261005c';
+import { computeMetrics } from '../core/metrics.js?v=20261006a';
 import { computeDiggingForces } from '../core/forces.js?v=20261005c';
 import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261005c';
 import { decodeParams, encodeParams } from '../core/share.js?v=20261005c';
 // 本次改动的入口及依赖统一使用发版戳，避免旧缓存混用指标和油缸端点定义。
-import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005d';
+import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261006a';
 import { createChartZoom } from './zoom.js?v=20261005a';
 import { renderSchematicFigure } from './schematic.js?v=20261005c';
 import { createControls } from './controls.js?v=20261005c';
-import { renderSpecTables, renderPrintHeader } from './chart-table.js?v=20261005c';
+import { renderSpecTables, renderPrintHeader } from './chart-table.js?v=20261006a';
 import { exportPng, exportSvg, copyText, safeFilename } from './exporter.js';
 
 const $ = (id) => document.getElementById(id);

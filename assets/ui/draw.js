@@ -11,7 +11,7 @@
  * 绘制时统一经 makeTransform 映射到像素；文字不参与缩放，始终保持可读字号。
  */
 
-import { METRIC_META } from '../core/metrics.js?v=20261005c';
+import { METRIC_META } from '../core/metrics.js?v=20261006a';
 import { solvePose, toRad, bodyPolygons, attachmentPolygons, armHeelAlong } from '../core/geometry.js';
 import { bucketRotationRange, jointRanges } from '../core/params.js?v=20261005c';
 import { cylinderPose, boomCylLength, armCylLength, bucketCylLength, boomAngleFromLength, armDeltaFromLength, bucketPsiFromLength } from '../core/cylinders.js?v=20261005c';

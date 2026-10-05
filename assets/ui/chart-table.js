@@ -9,7 +9,7 @@
 
 import { PARAM_SPEC, PARAM_GROUPS, bucketRotationRange, jointRanges } from '../core/params.js?v=20261005c';
 import { boomCylBodyPoint, armRodPerpSpan, verifyCylinderLayout } from '../core/cylinders.js?v=20261005c';
-import { METRIC_META } from '../core/metrics.js?v=20261005c';
+import { METRIC_META } from '../core/metrics.js?v=20261006a';
 
 const mm = (v) => Math.round(v).toLocaleString('en-US');
 
