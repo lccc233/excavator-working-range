@@ -1,7 +1,7 @@
 # 挖掘机作业范围图生成器
 
 > 调几何参数 → 实时生成反铲液压挖掘机作业范围包络图与作业尺寸。
-> **纯静态 · 零依赖 · 零构建 · 零后端**：所有计算都在浏览器里完成，服务端不存任何数据。
+> **纯静态 · 零依赖 · 零构建 · 零后端**：所有计算都在浏览器里完成，没有业务数据接口或数据库。
 
 [文档索引](#文档) ·
 [快速开始](#快速开始) ·
@@ -9,7 +9,9 @@
 
 > 演示站点已在自有云主机上线（阿里云 ECS + nginx），**地址不随本仓库公开**；需要试用或看线上效果请联系作者。
 
-![界面预览：实体外形 + 八段圆弧包络 + 尺寸标注 + 参数面板](docs/images/app-ui.png)
+![当前 E215 界面：五项作业尺寸、最小回转半径和当前姿态挖掘力](docs/images/app-ui.jpg)
+
+当前计算与部署基线为 `2ecf455`（2026-10-05），示例图使用 `E215HC4488A06A0`。本版本保留五项作业尺寸及独立的最小回转半径，已移除最大垂直挖掘深度和斗底安装角。E215 参数按收到的尺寸资料录入，尚无厂家标称作业尺寸用于对标；20 吨级示例机型用于样本标定。
 
 ---
 
@@ -22,7 +24,7 @@
 - **图面按真机画**：履带轮系、配重机罩、驾驶室、弯动臂、切半圆斗形，以及 GB/T 4460 的机构运动简图符号；
 - **数据能被核对**：附参数表（含铰点坐标对照、油缸布置自检），并可与厂家样本逐项对标。
 
-标定基准是**某 20 吨级挖掘机**——动臂 5700 / 斗杆 2925 / 斗容 0.93 m³，公开样本五项标称值全部复现，偏差 < 0.1%：
+标定基准是**某 20 吨级挖掘机**——动臂 5700 / 斗杆 2925 / 斗容 0.93 m³，公开样本四项作业尺寸及最小回转半径的标称值全部复现，偏差 < 0.1%：
 
 | 指标 | 样本标称 | 本工具计算 |
 |---|---|---|
@@ -36,7 +38,9 @@
 
 | 实体外形（真机侧视） | 机构运动简图（GB/T 4460 符号） |
 |---|---|
-| ![实体外形](docs/images/chart-outline.png) | ![机构运动简图](docs/images/chart-schematic.png) |
+| ![E215 实体外形](docs/images/chart-outline.svg) | ![E215 机构运动简图](docs/images/chart-schematic.svg) |
+
+两图由当前生产渲染器生成，使用相同机型、默认工作姿态和尺寸数据。默认液压参数为工作压力 34.3 MPa、回油背压 0.5 MPa、综合效率 0.90；E215 当前姿态理论收斗力为 **100.7 kN**，斗杆内收力为 **82.0 kN**，两项均为油缸伸出。数值随姿态和液压参数变化，不是厂家标称最大挖掘力。
 
 ---
 
@@ -48,9 +52,9 @@
 | 当前姿态挖掘力 | 用斗杆与铲斗油缸的净液压力和机构瞬时力传递比估算斗齿切向单动作理论力；压力、背压、效率、缸径、杆径与数量均可修改 |
 | 油缸反解关节角 | 关节角**不是输入项**。三根油缸各由「缸筒端 + 活塞杆端 + 安装距 + 行程」定出关节角范围，避免「油缸说一套、角度说另一套」 |
 | 标准四连杆铲斗 | 斗杆–摇杆–连杆–铲斗：摇杆与连杆都是两铰点杆，与铲斗油缸活塞杆共用一个销轴 P |
-| 五项作业尺寸 | 全部按国标姿态定义实现（不是取包络极值），并在图上按对应姿态标注 |
-| 八段圆弧包络 | 作业范围包络按作图法逐段生成，与厂家样本图叠合验证过 |
-| 最小回转半径 | 用「支撑函数 + 换顶点角」求精确极小值，不靠采样，改斗形也不会因采样错过谷底而算错 |
+| 五项作业尺寸 | 按各指标的定义姿态计算；行程受限时部分指标采用项目约定的可达姿态，并给出相关提示 |
+| 八段圆弧包络 | 按指定八步单缸运动逐段生成闭合轨迹；接点连续，不要求每处相切，见 [包络验证](docs/包络验证.md) |
+| 最小回转半径 | 铲斗朝向用「支撑函数 + 换顶点角」精确求解，动臂与斗杆角度使用 25×25 网格采样 |
 | 两种图面 | 实体外形（真机侧视）/ 机构运动简图（转动副画圆圈、移动副画油缸、构件画杆件） |
 | 工作姿态可调 | 直接拖三根油缸的长度（量程 = 安装距 ~ 安装距+行程），姿态随时可存进分享链接 |
 | 手机可用 | 竖屏打开**首屏就能看到作业范围图**（图独占一块自适应高度的画布，与顶栏/工具栏高度解耦）；图面支持双指捏合缩放、放大后单指平移、双击复位，右下角也有 ＋/−/复位 按钮；工具栏在窄屏改为单行横向滚动，姿态面板移到图下方不再遮挡 |
@@ -86,9 +90,9 @@ assets/core/              计算内核 —— 零 DOM，可在 Node 里直接单
   geometry.js             平面连杆运动学、外形轮廓、斗形作图法
   cylinders.js            三根油缸的正解/反解、铲斗四连杆、装配支、油缸布置自检
   params.js               参数规范（48 项）、范围收敛、合法性校验、派生量
-  metrics.js              五项作业尺寸 + 各自的标准姿态
+  metrics.js              五项作业尺寸 + 各自的定义姿态
   forces.js               当前姿态斗杆/铲斗理论切向挖掘力
-  envelope.js             八段圆弧包络 + 最小回转半径（精确解）
+  envelope.js             八段圆弧包络 + 最小回转半径（铲斗朝向精确、其余角度采样）
   presets.js              机型预设（已标定的 20 吨级机型与 E215 尺寸资料）
   share.js                分享链接编解码（短键 + 只写差异字段）
 assets/ui/                浏览器界面层（DOM / SVG）
@@ -103,7 +107,7 @@ assets/style.css          样式（含 @media print 打印排版与窄屏适配�
 tests/                    159 项 node 测试（11 个文件）
 tools/                    本地服务、测试入口、标定与反解工具
 deploy/                   阿里云 ECS + nginx 部署手册与打包脚本
-.verify/selftest.html     浏览器端自检页（80+ 项检查，随代码入库维护）
+.verify/selftest.html     浏览器端自检页（当前 113 项检查，随代码入库维护）
 docs/                     技术文档（见下）
 ```
 
@@ -120,9 +124,9 @@ A  动臂根部铰点        B  动臂–斗杆铰点        C  斗杆–铲斗�
 B = A + L1·u(α)        C = B + L2·u(α+Δ)      T = C + R3·u(α+Δ+ψ)      u(t) = (cos t, sin t)
 
 关节角范围 ← 三根油缸：安装位置 + 安装距 + 行程  → 反解（扫单调区段 + 二分求根）
-作业范围包络 ← 八段圆弧作图法：每段只让一个关节走完全程，其余保持不动
-五项作业尺寸 ← 各自的标准姿态（不是取包络极值），姿态与指标严格对应
-最小回转半径 ← 斗体轮廓的支撑函数在可达朝向区间上的精确极小值
+作业范围包络 ← 八段圆弧作图法：每段只动一个关节，到规定终点，其余保持不动
+五项作业尺寸 ← 各自的定义姿态（不是取包络极值），自定义参数需核对行程提示
+最小回转半径 ← 铲斗朝向精确求解 + 动臂/斗杆角度网格采样
 铲斗外形 ← 「切掉一部分的半圆」：直边端点为齿尖 T，切除线与直边交点为铰点 C，
            切除线另一端为连杆铰点 E —— 形状完全由 bktEAlong / bktEPerp / bucketRadius 推出
 ```
@@ -154,7 +158,9 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 ```
 
 - **为什么不用 `node --test tests/`**：在受限沙箱里 `node --test` 会为每个测试文件 spawn 子进程并走管道收集输出，沙箱禁止命名管道会直接 `EPERM` 失败。`tools/test.mjs` 把全部测试文件 import 进同一个进程，绕开这个问题，也让 `npm test` 保持一条命令。
-- **浏览器端自检**：打开 `.verify/selftest.html`（80+ 项检查，含渲染/导出/布局/数值），用于验证 node 里测不到的那一层。
+- **浏览器端自检**：打开 `.verify/selftest.html`（当前 113 项检查，含渲染/导出/布局/数值），用于验证 node 里测不到的那一层。
+- **八步作图验证**：运行 `node tools/verify-envelope-sequence.mjs`，逐段检查两种预设的圆心、半径、运动方向、三缸长度、①④共线及首尾闭合。
+- **文档示例图**：运行 `node tools/gen-doc-figures.mjs`，由生产模型生成四张 SVG；界面截图另从真实页面保存。
 - **标定工具**：`tools/calibrate.mjs`（对样本指标）、`tools/fit-preset.mjs`（反解机型几何）、`tools/setup-cylinders.mjs`（按标定角反算油缸安装距/行程）。
 
 细节见 **[docs/开发与测试.md](docs/开发与测试.md)**。
@@ -179,7 +185,10 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 需要逐项核对数值时，切到「参数表」页签看表格，比在图上认标注更省事。
 
 **Q：参数会被上传吗？图纸数据安全吗？**
-不会。所有计算在浏览器本地完成，页面不发任何请求；分享链接是**把参数编码在 URL 里**，服务端不存数据（部署的也只是一堆静态文件）。
+计算和调参在浏览器本地完成，不调用业务数据接口。页面加载时会请求静态资源；分享链接会**把参数编码在 URL 里**，链接接收者能读取这些参数，Web 服务器也可能记录请求 URL。
+
+**Q：E215 包络左侧和右下方为什么有折角？**
+这两处是第②→③、③→④段的接点，切线方向各改变约 14.7°。八步规定每次只动一根油缸，圆弧圆心依次在 A/B/C 之间切换，只要求首尾相接；折角符合该作图法。完整动作、缸长和验证方法见 [docs/包络验证.md](docs/包络验证.md)。
 
 **Q：能改成命令行 / 桌面端 / 小程序吗？**
 可以。`assets/core/*` 是零 DOM 的纯函数模块，换掉 `assets/ui/` 这一层即可复用全部计算与测试。
@@ -190,7 +199,8 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 
 | 文档 | 内容 |
 |---|---|
-| [docs/模型与算法.md](docs/模型与算法.md) | 坐标系与符号、油缸反解、四连杆、八段圆弧包络作图法、五项指标定义、最小回转半径精确解、斗形作图法 |
+| [docs/模型与算法.md](docs/模型与算法.md) | 坐标系与符号、油缸反解、四连杆、八段圆弧、五项指标定义、回转半径求解、斗形作图法、挖掘力计算 |
+| [docs/包络验证.md](docs/包络验证.md) | 八步动作、E215 各段缸长、圆弧与共线验证、折角及尺寸口径 |
 | [docs/参数口径.md](docs/参数口径.md) | 48 项参数表（自动生成）、坐标基准、自检清单、常见坑 |
 | [docs/开发与测试.md](docs/开发与测试.md) | 目录职责、如何加参数/加机型、测试体系与自检页、性能基线、提交约定 |
 | [docs/部署与运维.md](docs/部署与运维.md) | 上线流程、服务器信息、回滚、缓存与配置漂移注意事项 |
@@ -218,6 +228,6 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 
 A zero-dependency, build-free, backend-free web tool that draws the **working-range envelope** of a hydraulic backhoe excavator and computes its five standard working dimensions (max digging radius / ground-level digging radius / max digging height / dump height / max digging depth) plus the minimum swing radius.
 
-Inputs are **geometry** (boom / arm / bucket dimensions, pivot positions, cylinder mounts, installation lengths and strokes) — joint angles are *derived* by inverting the linkage, so there is a single source of truth. The envelope is drawn with the classic eight-arc construction method; the bucket is stylised as a semicircle with a wedge cut off, whose straight-edge end is the tooth tip, whose cut-edge/straight-edge intersection is the stick-to-bucket pivot, and whose other cut point is the linkage pivot. Calibrated against the published datasheet of a 20-tonne-class excavator (all five nominal values reproduced within 0.1%).
+Inputs are **geometry** (boom / arm / bucket dimensions, pivot positions, cylinder mounts, installation lengths and strokes) — joint angles are *derived* by inverting the linkage. The eight-arc construction follows a prescribed sequence of single-cylinder movements; joins are continuous but need not be tangent. Bucket orientation is solved exactly for minimum swing radius, while boom and arm angles are sampled. The 20-tonne example reproduces four published working dimensions and the minimum swing radius within 0.1%. E215 uses supplied geometry and cylinder dimensions without a manufacturer working-range calibration.
 
 Run it with `node tools/serve.mjs`, test it with `node tools/test.mjs`.
