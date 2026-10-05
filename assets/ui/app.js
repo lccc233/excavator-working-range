@@ -17,7 +17,7 @@ import { computeDiggingForces } from '../core/forces.js?v=20261005c';
 import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261005c';
 import { decodeParams, encodeParams } from '../core/share.js?v=20261005c';
 // 本次改动的入口及依赖统一使用发版戳，避免旧缓存混用指标和油缸端点定义。
-import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005c';
+import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005d';
 import { createChartZoom } from './zoom.js?v=20261005a';
 import { renderSchematicFigure } from './schematic.js?v=20261005c';
 import { createControls } from './controls.js?v=20261005c';

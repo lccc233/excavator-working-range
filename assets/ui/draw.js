@@ -16,6 +16,7 @@ import { solvePose, toRad, bodyPolygons, attachmentPolygons, armHeelAlong } from
 import { bucketRotationRange, jointRanges } from '../core/params.js?v=20261005c';
 import { cylinderPose, boomCylLength, armCylLength, bucketCylLength, boomAngleFromLength, armDeltaFromLength, bucketPsiFromLength } from '../core/cylinders.js?v=20261005c';
 import { schematicModel, drawSchematic, drawSchematicBase, schematicLegend } from './schematic.js?v=20261005c';
+import { machinePaintDefs, drawMachineBody, drawBoomBrand, drawAttachmentDetails } from './machine-outline.js?v=20261005d';
 
 const FONT = `system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif`;
 
@@ -320,6 +321,7 @@ export function renderChart(o) {
 
   const parts = [];
   parts.push(defs());
+  if (view.style !== 'schematic' && (view.showBody || showPose)) parts.push(machinePaintDefs());
 
   /* ---- 网格与刻度 ---- */
   const sx = niceStep(world.maxX - world.minX);
@@ -386,128 +388,7 @@ export function renderChart(o) {
     // 机构运动简图里不画整机外形，只留一条虚线底盘标出机器坐在哪儿
     parts.push(drawSchematicBase(p, T));
   } else if (view.showBody) {
-    const poly = (pts, fill, stroke = '#334155', w = 1.4) =>
-      `<polygon points="${pts.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="${fill}" stroke="${stroke}" stroke-width="${w}" stroke-linejoin="round"/>`;
-    const line = (a, b, stroke = '#94a3b8', w = 1) =>
-      `<line x1="${n(T.X(a.x))}" y1="${n(T.Y(a.y))}" x2="${n(T.X(b.x))}" y2="${n(T.Y(b.y))}" stroke="${stroke}" stroke-width="${w}"/>`;
-    const dot = (q, r, fill = '#475569', stroke = 'none') =>
-      `<circle cx="${n(T.X(q.x))}" cy="${n(T.Y(q.y))}" r="${n(r)}" fill="${fill}" stroke="${stroke}" stroke-width="0.8"/>`;
-    const bodyParts = [];
-
-    /* ---- 履带：外轮廓 → 链轨 → 轮系 ---- */
-    bodyParts.push(poly(body.undercarriage, '#cfd8e4'));
-    bodyParts.push(poly(body.trackChain, '#c2cddc'));
-    // 履带板（链轨节）：沿履带等分画短竖线
-    const shoeN = Math.max(10, Math.round(p.trackLength / 380));
-    for (let i = 0; i < shoeN; i++) {
-      const x = -p.trackLength / 2 + (p.trackLength * (i + 0.5)) / shoeN;
-      const inset = Math.max(12, p.trackHeight * 0.045) * 1.5;
-      if (Math.abs(x) > p.trackLength / 2 - inset * 2.6) continue;
-      bodyParts.push(line({ x, y: inset }, { x, y: p.trackHeight - inset }, '#9fb0c4', 0.9));
-    }
-    for (const w of body.wheels) {
-      const rr = Math.max(1.6, w.r * T.s);
-      const big = w.kind === 'idler' || w.kind === 'sprocket';
-      bodyParts.push(
-        `<circle cx="${n(T.X(w.x))}" cy="${n(T.Y(w.y))}" r="${n(rr)}" fill="${big ? '#b9c5d5' : '#8fa1b6'}" stroke="#475569" stroke-width="${big ? 1.1 : 0.7}"/>`,
-      );
-      if (big) bodyParts.push(dot(w, Math.max(0.8, rr * 0.28), '#eef4fb', '#475569'));
-    }
-    bodyParts.push(poly(body.carbody, '#b9c5d5'));
-
-    /* ---- 回转支承：双圈，读起来是个支承 ---- */
-    const sr = body.slewRing;
-    bodyParts.push(
-      `<circle cx="${n(T.X(sr.cx))}" cy="${n(T.Y(sr.cy))}" r="${n(Math.max(3, sr.r * T.s))}" fill="#f1f5f9" stroke="#64748b" stroke-width="1.1"/>`,
-      `<circle cx="${n(T.X(sr.cx))}" cy="${n(T.Y(sr.cy))}" r="${n(Math.max(2, sr.r * 0.62 * T.s))}" fill="none" stroke="#94a3b8" stroke-width="0.9"/>`,
-    );
-
-    /* ---- 平台 / 配重 / 机罩 / 驾驶室 ---- */
-    bodyParts.push(poly(body.upper, '#e2e8f0'));
-    bodyParts.push(poly(body.boomFoot, '#cbd5e1'));
-    bodyParts.push(poly(body.counterweight, '#cbd5e1'));
-    bodyParts.push(poly(body.hood, '#dbe3ec'));
-    bodyParts.push(poly(body.cab, '#eef4fb', '#334155', 1.5));
-
-    /* ---- 机罩：散热格栅（内嵌矩形 + 竖线）+ 排气管 ---- */
-    const hood = body.hood;
-    const hx0 = hood[0].x;
-    const hx1 = hood[1].x;
-    const grilleW = (hx1 - hx0) * 0.30;
-    const grilleX = hx0 + (hx1 - hx0) * 0.52;
-    const gyTop = body.hoodTop - 26;
-    const gyBot = body.deck + 90;
-    bodyParts.push(
-      `<rect x="${n(T.X(grilleX))}" y="${n(T.Y(gyTop))}" width="${n(Math.max(6, grilleW * T.s))}" height="${n(Math.max(6, (gyTop - gyBot) * T.s))}" fill="#c3cfdd" stroke="#94a3b8" stroke-width="0.9"/>`,
-    );
-    for (const f of [0.3, 0.55, 0.8]) {
-      const gx = grilleX + grilleW * f;
-      bodyParts.push(line({ x: gx, y: gyTop - 6 }, { x: gx, y: gyBot + 6 }, '#94a3b8', 0.9));
-    }
-    const ex = hx0 + (hx1 - hx0) * 0.12;
-    bodyParts.push(
-      `<rect x="${n(T.X(ex))}" y="${n(T.Y(body.hoodTop + 96))}" width="${n(Math.max(3, 86 * T.s))}" height="${n(Math.max(4, 96 * T.s))}" fill="#94a3b8" stroke="#475569" stroke-width="0.9"/>`,
-    );
-
-    /* ---- 驾驶室：玻璃面 + 门 + 顶棚外伸（画成「有窗的驾驶室」，而不是一个方盒） ---- */
-    const cabPts = body.cab.map((q) => T(q.x, q.y));
-    const cabTopY = Math.min(cabPts[2].y, cabPts[3].y);
-    const cabBotY = Math.max(cabPts[0].y, cabPts[1].y);
-    const cabL = Math.min(cabPts[0].x, cabPts[3].x);
-    const cabR = Math.max(cabPts[1].x, cabPts[2].x);
-    const cabH = Math.max(1, cabBotY - cabTopY);
-    const slant = cabPts[1].x - cabPts[2].x; // 前风挡后倾量（屏幕像素）
-    const xFront = (y) => cabR - (slant * (cabBotY - y)) / cabH;
-    // 玻璃面：上沿在顶棚下方，下沿约 60% 高度，前缘顺着风挡斜度
-    const gy0 = cabTopY + cabH * 0.13;
-    const gy1 = cabTopY + cabH * 0.62;
-    const glass = [
-      { x: cabL + 7, y: gy0 },
-      { x: xFront(gy0) - 7, y: gy0 },
-      { x: xFront(gy1) - 7, y: gy1 },
-      { x: cabL + 7 + (cabR - cabL) * 0.06, y: gy1 },
-    ];
-    bodyParts.push(
-      `<polygon points="${glass.map((q) => `${n(q.x)},${n(q.y)}`).join(' ')}" fill="#dbeafe" stroke="#94a3b8" stroke-width="0.9"/>`,
-    );
-    // 顶棚外伸
-    bodyParts.push(
-      `<line x1="${n(cabL - 6)}" y1="${n(cabTopY)}" x2="${n(cabR + 8)}" y2="${n(cabTopY)}" stroke="#475569" stroke-width="1.6"/>`,
-    );
-    // 门缝 + 把手
-    const doorX = cabL + (cabR - cabL) * 0.34;
-    bodyParts.push(
-      `<line x1="${n(doorX)}" y1="${n(cabTopY + 4)}" x2="${n(doorX)}" y2="${n(cabBotY)}" stroke="#94a3b8" stroke-width="1"/>`,
-      `<line x1="${n(doorX + 6)}" y1="${n(cabBotY - cabH * 0.42)}" x2="${n(doorX + 24)}" y2="${n(cabBotY - cabH * 0.42)}" stroke="#64748b" stroke-width="1.6"/>`,
-    );
-    // 底板与平台的接缝
-    bodyParts.push(
-      `<line x1="${n(cabL)}" y1="${n(cabBotY)}" x2="${n(cabR)}" y2="${n(cabBotY)}" stroke="#64748b" stroke-width="1.2"/>`,
-    );
-
-    /* ---- 配重分色缝 ---- */
-    {
-      const cw = body.counterweight.map((q) => T(q.x, q.y));
-      const cwTop = Math.min(...cw.map((q) => q.y));
-      const cwBot = Math.max(...cw.map((q) => q.y));
-      const seamY = cwTop + (cwBot - cwTop) * 0.24;
-      bodyParts.push(
-        `<line x1="${n(Math.min(...cw.map((q) => q.x)) + 8)}" y1="${n(seamY)}" x2="${n(Math.max(...cw.map((q) => q.x)) - 8)}" y2="${n(seamY)}" stroke="#aab8c9" stroke-width="1.1"/>`,
-      );
-    }
-
-    /* ---- 机罩上方扶手栏杆 ---- */
-    const railY = body.hoodTop + 150;
-    const railX0 = hood[0].x + 40;
-    const railX1 = hood[1].x - 40;
-    bodyParts.push(
-      `<line x1="${n(T.X(railX0))}" y1="${n(T.Y(railY))}" x2="${n(T.X(railX1))}" y2="${n(T.Y(railY))}" stroke="#94a3b8" stroke-width="1.2"/>`,
-    );
-    for (const rx of [railX0, (railX0 + railX1) / 2, railX1]) {
-      bodyParts.push(line({ x: rx, y: body.hoodTop - 10 }, { x: rx, y: railY }, '#94a3b8', 1));
-    }
-
-    parts.push(`<g>${bodyParts.join('')}</g>`);
+    parts.push(drawMachineBody(p, T, body));
   }
 
   /* ---- 尾部回转圆 ---- */
@@ -527,6 +408,8 @@ export function renderChart(o) {
         `<circle cx="${n(tq.x)}" cy="${n(tq.y)}" r="2.6" fill="#dc2626"><title>斗齿尖</title></circle></g>`,
     );
   } else if (showPose && pose) {
+    // 无法解出机构简图时会退回实体外形，同样需要内嵌配色定义。
+    if (schematic) parts.push(machinePaintDefs());
     const att = attachmentPolygons(p, pose);
     const g = [];
     const cyl = cylinderPose(p, pose);
@@ -540,7 +423,7 @@ export function renderChart(o) {
       if (!m || !m.needed) return;
       const q = [m.base1, m.base2, m.pin].map(px);
       g.push(
-        `<polygon data-mount="${m.key}" points="${q.map((c) => `${n(c.x)},${n(c.y)}`).join(' ')}" fill="#cbd5e1" stroke="#334155" stroke-width="1.2" stroke-linejoin="round"><title>${esc(m.label)}</title></polygon>`,
+        `<polygon data-mount="${m.key}" points="${q.map((c) => `${n(c.x)},${n(c.y)}`).join(' ')}" fill="#eeb920" stroke="#806416" stroke-width="1.2" stroke-linejoin="round"><title>${esc(m.label)}</title></polygon>`,
         `<circle cx="${n(q[2].x)}" cy="${n(q[2].y)}" r="${n(Math.max(2.4, 130 * T.s))}" fill="#f8fafc" stroke="#1e293b" stroke-width="1.1"/>`,
       );
     };
@@ -549,18 +432,19 @@ export function renderChart(o) {
 
     for (const seg of att.boomSegs) {
       g.push(
-        `<polygon points="${seg.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="#cbd5e1" stroke="#1e293b" stroke-width="1.3" stroke-linejoin="round"/>`,
+        `<polygon points="${seg.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="url(#sdlg-arm)" stroke="#806416" stroke-width="1.3" stroke-linejoin="round"/>`,
       );
     }
     drawMount(mounts?.armRod); // 斗杆油缸活塞杆端（斗杆上表面）
     drawMount(mounts?.bktBody); // 铲斗油缸缸筒端（斗杆上表面）
 
     g.push(
-      `<polygon points="${att.armQuad.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="#cbd5e1" stroke="#1e293b" stroke-width="1.3" stroke-linejoin="round"/>`,
+      `<polygon points="${att.armQuad.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="url(#sdlg-arm)" stroke="#806416" stroke-width="1.3" stroke-linejoin="round"/>`,
     );
     g.push(
-      `<polygon points="${att.bucket.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="#94a3b8" stroke="#1e293b" stroke-width="1.3" stroke-linejoin="round"/>`,
+      `<polygon points="${att.bucket.map((q) => `${n(T.X(q.x))},${n(T.Y(q.y))}`).join(' ')}" fill="url(#sdlg-steel)" stroke="#20272e" stroke-width="1.3" stroke-linejoin="round"/>`,
     );
+    g.push(drawAttachmentDetails(att, T), drawBoomBrand(p, pose, T));
     // 斗形是「切掉一部分的半圆」，轮廓点序为
     //   C(铰点) → T(齿尖，未被切掉的直边端点) → 圆弧(斗壁) → E(连杆铰点) → C(切除线)。
     // 斗齿只画在齿尖 T 那个尖角的外角平分线方向上：轮廓的首尾连线现在是切除线
@@ -605,14 +489,14 @@ export function renderChart(o) {
         const B2 = px(b);
         const dx = B2.x - A2.x;
         const dy = B2.y - A2.y;
-        const len = Math.hypot(dx, dy) || 1;
         // 缸筒占 55%，其余是活塞杆
         const mx = A2.x + dx * 0.55;
         const my = A2.y + dy * 0.55;
         return `
-          <line x1="${n(A2.x)}" y1="${n(A2.y)}" x2="${n(mx)}" y2="${n(my)}" stroke="#475569" stroke-width="5.5" stroke-linecap="round"/>
-          <line x1="${n(mx)}" y1="${n(my)}" x2="${n(B2.x)}" y2="${n(B2.y)}" stroke="#94a3b8" stroke-width="2.6" stroke-linecap="round"/>
-          <line x1="${n(A2.x)}" y1="${n(A2.y)}" x2="${n(B2.x)}" y2="${n(B2.y)}" stroke="#334155" stroke-width="0.7" opacity="0.5"/>
+          <line x1="${n(A2.x)}" y1="${n(A2.y)}" x2="${n(mx)}" y2="${n(my)}" stroke="#303840" stroke-width="${n(Math.max(2.5, 190 * T.s))}" stroke-linecap="round"/>
+          <line x1="${n(A2.x)}" y1="${n(A2.y)}" x2="${n(mx)}" y2="${n(my)}" stroke="#efbb28" stroke-width="${n(Math.max(1.3, 120 * T.s))}" stroke-linecap="round"/>
+          <line x1="${n(mx)}" y1="${n(my)}" x2="${n(B2.x)}" y2="${n(B2.y)}" stroke="#586670" stroke-width="${n(Math.max(1.7, 95 * T.s))}" stroke-linecap="round"/>
+          <line x1="${n(mx)}" y1="${n(my)}" x2="${n(B2.x)}" y2="${n(B2.y)}" stroke="#d6e0e4" stroke-width="${n(Math.max(0.8, 55 * T.s))}" stroke-linecap="round"/>
           <title>${esc(label)}</title>`;
       };
       g.push(barrel(cyl.boom.body, cyl.boom.rod, '动臂油缸'));
@@ -625,7 +509,7 @@ export function renderChart(o) {
         const bw = Math.max(8, 260 * T.s);
         const bh = Math.max(8, 200 * T.s);
         g.push(
-          `<rect x="${n(b.x - bw / 2)}" y="${n(b.y - bh * 0.35)}" width="${n(bw)}" height="${n(bh)}" rx="${n(Math.min(bw, bh) * 0.2)}" fill="#cbd5e1" stroke="#334155" stroke-width="1.1"/>`,
+          `<rect x="${n(b.x - bw / 2)}" y="${n(b.y - bh * 0.35)}" width="${n(bw)}" height="${n(bh)}" rx="${n(Math.min(bw, bh) * 0.2)}" fill="#eeb920" stroke="#806416" stroke-width="1.1"/>`,
         );
       }
 
