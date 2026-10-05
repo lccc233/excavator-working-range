@@ -2,12 +2,11 @@
  * 机型预设库
  * ==========================================================================
  *
- * 每个机型的「几何参数」都是用 tools/fit-preset.mjs 从厂家公开样本的作业范围
- * 指标反解标定出来的——样本只给指标，不给铰点高度和关节角范围。
- * 而油缸安装位置、安装距、行程、铲斗连杆尺寸样本一律不公开，
- * 因此这些由 tools/setup-cylinders.mjs 按机型尺度构造并反算：
+ * x20t 的「几何参数」用 tools/fit-preset.mjs 从厂家公开样本的作业范围反解标定。
+ * 新增机型则按收到的尺寸资料录入；未提供的整机外形字段沿用通用默认值。
+ * x20t 的油缸安装位置、安装距、行程、铲斗连杆尺寸由工具按机型尺度构造并反算：
  * 让解出的关节角范围与标定好的角度逐一对应，这样预设仍能精确复现样本指标。
- * ⚠️ 油缸与连杆数据是「可替换的示例值」——拿到真机图纸后直接覆盖即可。
+ * x20t 的油缸与连杆数据是「可替换的示例值」；新增机型按收到的图纸尺寸录入。
  *
  * 油缸布置口径（与界面输入、cylinders.js 完全一致）
  * --------------------------------------------------------------------------
@@ -39,8 +38,8 @@ const BASE_CYL = {
   boomCylBodyDX: 171,
   boomCylBodyDY: -467,
   boomCylRodAlong: 2964,
-  // ⚠️ 活塞杆端垂直动臂的滑块区间是 −1000 ~ +1000（params.js），预设值必须落在区间内。
-  //    这里取 −1000（区间下界，与原来标定的 −1198 最接近）：这个值同时决定动臂油缸的
+  // ⚠️ 活塞杆端垂直动臂的滑块区间是 −1500 ~ +1000（params.js），预设值必须落在区间内。
+  //    这里取 −1000（与原来标定的 −1198 接近）：这个值同时决定动臂油缸的
   //    「杠杆比」——取到 −800 以上（更靠近动臂轴线）时，油缸与动臂近乎共线，行程稍变
   //    仰角就狂涨（行程 ×1.5 会转到 120° 以上，挖掘高度反而下降），真机不会这么装。
   //    改这个值会改变油缸安装几何，安装距/行程要一起重标定（calibrateCylinders 按标定角反算），
@@ -71,6 +70,17 @@ const BASE_CYL = {
   bktEPerp: 553,
   bktLinkLen: 981,
   bktBranch: 1,
+
+  // 挖掘力液压参数：示例压力仅用于演示，按真机液压资料修改。
+  forcePressure: 34.3,
+  forceBackPressure: 0.5,
+  forceEfficiency: 0.9,
+  armCylBore: 135,
+  armCylRodDiameter: 95,
+  armCylCount: 1,
+  bktCylBore: 120,
+  bktCylRodDiameter: 80,
+  bktCylCount: 1,
 };
 
 /** 通用默认值（新建自定义机型时使用） */
@@ -131,6 +141,66 @@ export const PRESETS = [
     },
     calibration: { boomAngleMin: -39.26, boomAngleMax: 52.3, armRelMin: -140.5, armRelMax: -1.78 },
   },
+  {
+    // 图纸参数中的“沿构件坐标*垂直坐标”映射到模型的局部坐标；垂直方向按图纸记号录入。
+    ...BASE_DEFAULTS,
+    id: 'E215HC4488A06A0',
+    name: 'E215HC4488A06A0',
+    boomLength: 5700,
+    armLength: 2900,
+    bucketRadius: 1504,
+    boomBend: 900,
+    armCylBore: 130,
+    armCylRodDiameter: 95,
+    bktCylBore: 115,
+    bktCylRodDiameter: 80,
+    pivotX: 186,
+    pivotY: 1785,
+    boomCylBodyDX: 485,
+    boomCylBodyDY: -593,
+    boomCylRodAlong: 2212,
+    boomCylRodPerp: 897,
+    boomCylClosed: 1790,
+    boomCylStroke: 1235,
+    armCylBodyAlong: 3143 - 5700,
+    armCylBodyPerp: 1229,
+    armCylRodAlong: -825,
+    armCylRodPerp: 333,
+    armCylClosed: 2110,
+    armCylStroke: 1540,
+    // 铲斗油缸筒与摇杆坐标从斗杆根部 B 量取，模型坐标从铰点 C 量取，故减去斗杆长度。
+    bktCylBodyAlong: 335 - 2900,
+    bktCylBodyPerp: 649,
+    bktCylClosed: 1655,
+    bktCylStroke: 1065,
+    bktBellAlong: 2454 - 2900,
+    bktBellPerp: 41,
+    bktRockerLen: 610,
+    bktLinkLen: 580,
+    bktEAlong: -112,
+    bktEPerp: 453,
+    cylinders: {
+      boom: { bore: 120, rod: 80, stroke: 1235, installationLength: 1790 },
+      arm: { bore: 130, rod: 95, stroke: 1540, installationLength: 2110 },
+      bucket: { bore: 115, rod: 80, stroke: 1065, installationLength: 1655 },
+    },
+    sourceGeometry: {
+      boomPivot: '186*1785',
+      boomCylinderPivot: '485+-593',
+      boom: '5700-2212*897-3143*1229',
+      arm: '2900--825*333-335*649--2454*41',
+      rockerLinkage: '610-580',
+      bucket: '1504--112*453',
+    },
+    // 按上面的安装点、安装距和行程反解的端点角度（不是独立测得的厂家标定角）。
+    calculatedAngles: {
+      boom: { retracted: -40.174804, extended: 68.807794 },
+      armRelative: { retracted: -33.316076, extended: -156.304320 },
+      bucketRelative: { retracted: 36.318251, extended: -138.831804 },
+    },
+    nominal: {},
+    calibration: {},
+  },
 ];
 
 export const PRESET_IDS = PRESETS.map((m) => m.id);
@@ -144,6 +214,13 @@ export function clonePreset(id) {
   const found = getPreset(id) ?? PRESETS[0];
   return {
     ...found,
+    cylinders: Object.fromEntries(
+      Object.entries(found.cylinders ?? {}).map(([key, value]) => [key, { ...value }]),
+    ),
+    sourceGeometry: { ...(found.sourceGeometry ?? {}) },
+    calculatedAngles: Object.fromEntries(
+      Object.entries(found.calculatedAngles ?? {}).map(([key, value]) => [key, { ...value }]),
+    ),
     nominal: { ...(found.nominal ?? {}) },
     calibration: { ...(found.calibration ?? {}) },
   };

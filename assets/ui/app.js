@@ -10,11 +10,12 @@
  * 渲染管线：输入 → (rAF) → 校验 → 指标 → 包络 → 最小回转半径 → SVG 字符串
  */
 
-import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.js';
-import { validateParams } from '../core/params.js';
+import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.js?v=20261005b';
+import { validateParams } from '../core/params.js?v=20261005b';
 import { computeMetrics } from '../core/metrics.js';
+import { computeDiggingForces } from '../core/forces.js?v=20261005b';
 import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js';
-import { decodeParams, encodeParams } from '../core/share.js';
+import { decodeParams, encodeParams } from '../core/share.js?v=20261005b';
 // ?v= 发版戳：这两个模块改过，而老访客的浏览器可能还攥着 7 天缓存的旧副本
 // （资源文件名不带内容指纹，浏览器在自己的 max-age 到期前不会回源）。
 // 换一个没见过的 URL 才能把它们拉过来；线上缓存已改为 5 分钟，
@@ -23,8 +24,8 @@ import { decodeParams, encodeParams } from '../core/share.js';
 import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261005a';
 import { createChartZoom } from './zoom.js?v=20261005a';
 import { renderSchematicFigure } from './schematic.js';
-import { createControls } from './controls.js';
-import { renderSpecTables, renderPrintHeader } from './chart-table.js';
+import { createControls } from './controls.js?v=20261005b';
+import { renderSpecTables, renderPrintHeader } from './chart-table.js?v=20261005b';
 import { exportPng, exportSvg, copyText, safeFilename } from './exporter.js';
 
 const $ = (id) => document.getElementById(id);
@@ -40,6 +41,9 @@ const el = {
   presetSelect: $('presetSelect'),
   poseSelect: $('poseSelect'),
   poseCtl: $('poseCtl'),
+  forceSummary: $('forceSummary'),
+  forceBucketValue: $('forceBucketValue'),
+  forceArmValue: $('forceArmValue'),
   poseHint: $('poseHint'),
   zoomLevel: $('zoomLevel'),
 };
@@ -118,6 +122,8 @@ function recompute() {
 
   state.values = values;
   state.poses = poses;
+  state.pose = resolvePose(p, state.view, poses);
+  syncForceSummary();
   state.calcMs = t3 - t0;
   state.breakdown = { metrics: t1 - t0, swing: t2 - t1, envelope: t3 - t2 };
 
@@ -131,6 +137,15 @@ function showNotices(check, extraWarnings = []) {
   for (const e of check.errors ?? []) html.push(`<div class="notice error">✕ ${e}</div>`);
   for (const w of [...(check.warnings ?? []), ...extraWarnings]) html.push(`<div class="notice warn">! ${w}</div>`);
   controls.setExternalNotices(html.join(''));
+}
+
+function syncForceSummary() {
+  if (!el.forceSummary) return;
+  const force = state.valid ? computeDiggingForces(state.params, state.pose) : null;
+  el.forceSummary.hidden = !force;
+  if (!force) return;
+  el.forceBucketValue.textContent = force.bucketCurlKN.toFixed(1);
+  el.forceArmValue.textContent = force.armCrowdKN.toFixed(1);
 }
 
 /* ------------------------------------------------------------------ *
@@ -161,6 +176,7 @@ function renderChartNow() {
 
   // 当前姿态只解一次：绘图、参数表小图、油缸长度滑块都用它
   state.pose = state.valid ? resolvePose(state.params, state.view, state.poses) : null;
+  syncForceSummary();
 
   const t0 = performance.now();
   el.chartZoom.innerHTML = chartSvg(W, H);

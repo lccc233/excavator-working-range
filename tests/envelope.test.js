@@ -125,8 +125,9 @@ function armPose(m, alpha, delta, psi) {
   return { A, B, C, T: { x: C.x + m.bucketRadius * Math.cos(t), y: C.y + m.bucketRadius * Math.sin(t) } };
 }
 
-test('包络极值与标称指标一致（≤2 mm）', () => {
+test('有厂家标称值的预设：包络极值与指标一致（≤2 mm）', () => {
   for (const m of PRESETS) {
+    if (!Object.keys(m.nominal ?? {}).length) continue;
     const { values } = computeMetrics(m);
     const ex = envelopeExtremes(computeEnvelope(m));
     assert.ok(Math.abs(ex.maxY - values.maxDigHeight) < 2, `${m.id}: 最高点 ${ex.maxY.toFixed(2)} vs ${values.maxDigHeight.toFixed(2)}`);

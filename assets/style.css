@@ -116,6 +116,23 @@ select.btn { padding-right: 26px; appearance: none;
 .field-value input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .field-value .unit { font-size: 11px; color: var(--text-3); width: 22px; }
 
+.force-summary {
+  margin: 10px 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.force-summary[hidden] { display: none; }
+.force-summary-title { margin-bottom: 8px; font-size: 13px; font-weight: 700; }
+.force-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.force-result { display: grid; gap: 3px; padding: 8px 10px; background: #f8fafc; border-radius: 6px; }
+.force-result > span { color: var(--text-2); font-size: 12px; }
+.force-result strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+.force-result small { color: var(--text-3); font-size: 11px; }
+.force-summary-note { margin-top: 8px; color: var(--text-3); font-size: 11px; line-height: 1.5; }
+
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 18px; background: transparent; cursor: pointer; margin: 0;

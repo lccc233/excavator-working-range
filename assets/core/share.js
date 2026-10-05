@@ -9,8 +9,8 @@
  * 因此脏链接、缺字段、超范围数值都不会让页面崩掉。
  */
 
-import { PARAM_SPEC, sanitizeParams, toFiniteNumber } from './params.js';
-import { PRESETS, getPreset, BASE_DEFAULTS, defaultParams } from './presets.js';
+import { PARAM_SPEC, sanitizeParams, toFiniteNumber } from './params.js?v=20261005b';
+import { PRESETS, getPreset, BASE_DEFAULTS, defaultParams } from './presets.js?v=20261005b';
 
 /** 参数名 → 短键，尽量短且不歧义 */
 export const SHORT_KEYS = {
@@ -58,6 +58,16 @@ export const SHORT_KEYS = {
   bktEPerp: 'bp3',
   bktLinkLen: 'bll',
   bktBranch: 'bbr',
+  // 挖掘力液压参数
+  forcePressure: 'fp',
+  forceBackPressure: 'fbp',
+  forceEfficiency: 'fe',
+  armCylBore: 'ab',
+  armCylRodDiameter: 'ar',
+  armCylCount: 'ac',
+  bktCylBore: 'bbk',
+  bktCylRodDiameter: 'brk',
+  bktCylCount: 'bck',
 };
 
 export const LONG_KEYS = Object.fromEntries(Object.entries(SHORT_KEYS).map(([k, v]) => [v, k]));

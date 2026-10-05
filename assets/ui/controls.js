@@ -9,7 +9,7 @@
  *     失焦或回车才提交并做范围收敛
  */
 
-import { PARAM_SPEC, PARAM_GROUPS, validateParams } from '../core/params.js';
+import { PARAM_SPEC, PARAM_GROUPS, validateParams } from '../core/params.js?v=20261005b';
 
 const GROUP_HINT = {
   工作装置几何: '决定作业范围的基本尺寸',
@@ -17,6 +17,7 @@ const GROUP_HINT = {
   动臂油缸: '缸筒端以「相对动臂铰点 A 的 ΔX/ΔY」给出（一般 ΔX>0、ΔY<0）；行程决定动臂仰角范围',
   斗杆油缸: '缸筒端在动臂上表面；活塞杆端在斗杆上平面、B 点后方（沿斗杆为负、垂直斗杆为正）',
   铲斗油缸与四连杆: '铲斗油缸装在斗杆上方，活塞杆端接摇臂长臂；摇臂短臂经连杆拉动铲斗（标准四连杆）',
+  挖掘力液压参数: '设定压力、效率和相关油缸参数，实时估算当前姿态下的单动作切向挖掘力',
   整机外形: '影响图形外观与最小回转半径，不改变作业尺寸',
 };
 
@@ -27,6 +28,7 @@ const DEFAULT_OPEN = {
   动臂油缸: true,
   斗杆油缸: false,
   铲斗油缸与四连杆: false,
+  挖掘力液压参数: true,
   整机外形: false,
 };
 

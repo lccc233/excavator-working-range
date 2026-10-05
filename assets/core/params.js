@@ -41,7 +41,7 @@ export const PARAM_SPEC = [
     hint: 'C→斗齿尖 T 的距离，0.6~1.2 m³ 铲斗约 1150~1500 mm' },
   { key: 'bucketCapacity', group: '工作装置几何', label: '铲斗容量', unit: 'm³', min: 0.1, max: 4, step: 0.01, kind: 'number', primary: true,
     decimals: 2, hint: '仅用于参数表显示，不参与几何计算' },
-  { key: 'boomBend', group: '工作装置几何', label: '动臂弯折量', unit: 'mm', min: 0, max: 900, step: 10, kind: 'length', primary: false,
+  { key: 'boomBend', group: '工作装置几何', label: '动臂弯折量', unit: 'mm', min: 0, max: 1500, step: 10, kind: 'length', primary: false,
     hint: '动臂中部相对两端连线的偏移，只影响绘图观感，不参与计算' },
   { key: 'bucketBottomAngle', group: '工作装置几何', label: '斗底安装角', unit: '°', min: 20, max: 100, step: 0.5, kind: 'angle', primary: false,
     hint: '铲斗平底相对「销轴→斗齿尖」连线的夹角，用于确定最大垂直挖掘深度姿态' },
@@ -104,6 +104,24 @@ export const PARAM_SPEC = [
   { key: 'bktCylStroke', group: '铲斗油缸与四连杆', label: '行程', unit: 'mm', min: 100, max: 3000, step: 5, kind: 'length', primary: true,
     hint: '决定铲斗相对转角范围；伸出 → 收斗（挖掘方向）' },
 
+  // ---- 挖掘力液压参数 ----
+  { key: 'forcePressure', group: '挖掘力液压参数', label: '工作压力', unit: 'MPa', min: 1, max: 50, step: 0.1, kind: 'number', decimals: 2, primary: false,
+    hint: '当前动作进油腔压力；默认仅为演示值，请按实际液压系统填写' },
+  { key: 'forceBackPressure', group: '挖掘力液压参数', label: '回油背压', unit: 'MPa', min: 0, max: 5, step: 0.1, kind: 'number', decimals: 2, primary: false,
+    hint: '当前动作回油腔压力，按另一侧有效面积扣除反向液压力' },
+  { key: 'forceEfficiency', group: '挖掘力液压参数', label: '综合机械效率', unit: '', min: 0.1, max: 1, step: 0.01, kind: 'number', decimals: 2, primary: false,
+    hint: '对净液压力乘一次，表示油缸与机构的综合机械损失' },
+  { key: 'armCylBore', group: '挖掘力液压参数', label: '斗杆油缸缸径', unit: 'mm', min: 40, max: 500, step: 1, kind: 'length', primary: false },
+  { key: 'armCylRodDiameter', group: '挖掘力液压参数', label: '斗杆油缸杆径', unit: 'mm', min: 20, max: 400, step: 1, kind: 'length', primary: false,
+    hint: '必须小于缸径，用于计算有杆腔环形面积' },
+  { key: 'armCylCount', group: '挖掘力液压参数', label: '斗杆油缸数量', unit: '个', min: 1, max: 4, step: 1, kind: 'number', decimals: 0, primary: false,
+    hint: '相同尺寸、相同安装几何并联油缸的整数数量' },
+  { key: 'bktCylBore', group: '挖掘力液压参数', label: '铲斗油缸缸径', unit: 'mm', min: 40, max: 500, step: 1, kind: 'length', primary: false },
+  { key: 'bktCylRodDiameter', group: '挖掘力液压参数', label: '铲斗油缸杆径', unit: 'mm', min: 20, max: 400, step: 1, kind: 'length', primary: false,
+    hint: '必须小于缸径，用于计算有杆腔环形面积' },
+  { key: 'bktCylCount', group: '挖掘力液压参数', label: '铲斗油缸数量', unit: '个', min: 1, max: 4, step: 1, kind: 'number', decimals: 0, primary: false,
+    hint: '相同尺寸、相同安装几何并联油缸的整数数量' },
+
   // ---- 整机外形 ----
   { key: 'tailSwingRadius', group: '整机外形', label: '尾部回转半径', unit: 'mm', min: 800, max: 5000, step: 10, kind: 'length', primary: false,
     hint: '回转中心至机尾最外缘的水平距离' },
@@ -118,7 +136,7 @@ export const PARAM_SPEC = [
   { key: 'armWidth', group: '整机外形', label: '斗杆截面宽', unit: 'mm', min: 150, max: 600, step: 10, kind: 'length', primary: false },
 ];
 
-export const PARAM_GROUPS = ['工作装置几何', '铰点位置', '动臂油缸', '斗杆油缸', '铲斗油缸与四连杆', '整机外形'];
+export const PARAM_GROUPS = ['工作装置几何', '铰点位置', '动臂油缸', '斗杆油缸', '铲斗油缸与四连杆', '挖掘力液压参数', '整机外形'];
 
 export const PARAM_SPEC_BY_KEY = Object.fromEntries(PARAM_SPEC.map((s) => [s.key, s]));
 
@@ -169,6 +187,8 @@ export function validateParams(p) {
   if (!(p.armCylStroke > 0)) errors.push('斗杆油缸行程必须大于 0');
   if (!(p.bktCylStroke > 0)) errors.push('铲斗油缸行程必须大于 0');
   if (!(p.bktLinkLen > 0)) errors.push('连杆长度必须大于 0');
+  if (!(p.armCylRodDiameter > 0 && p.armCylRodDiameter < p.armCylBore)) errors.push('斗杆油缸杆径必须大于 0 且小于缸径');
+  if (!(p.bktCylRodDiameter > 0 && p.bktCylRodDiameter < p.bktCylBore)) errors.push('铲斗油缸杆径必须大于 0 且小于缸径');
 
   if (p.pivotY >= p.boomLength + p.armLength + p.bucketRadius) {
     errors.push('动臂铰点高度已超过整条工作装置链长，无法触地');

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>挖掘机作业范围图生成器 · 反铲液压挖掘机作业尺寸在线计算</title>
-<meta name="description" content="在线调整动臂长度、斗杆长度、铲斗与铰点位置等几何参数，实时生成反铲液压挖掘机作业范围包络图，并计算最大挖掘半径、最大挖掘深度、最大挖掘高度、最大卸载高度、最大垂直挖掘深度等作业尺寸。">
+<meta name="description" content="在线调整反铲液压挖掘机几何与液压参数，实时计算作业范围、作业尺寸和当前姿态理论挖掘力。">
 <meta name="theme-color" content="#2563eb">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Cpath d='M5 24h7l4-9 6-3' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20 12l5 2-2 5z' fill='white'/%3E%3C/svg%3E">
 <!--
@@ -16,7 +16,7 @@
   也会每 5 分钟回源校验一次，所以这个戳**不需要每次发版都改**；留着是为了万一
   又出现长缓存时能一键强推。
 -->
-<link rel="stylesheet" href="assets/style.css?v=20261005a">
+<link rel="stylesheet" href="assets/style.css?v=20261005b">
 </head>
 <body>
 <div class="app">
@@ -104,6 +104,14 @@
           <button class="btn pose-reset" id="btnPoseReset" title="回到默认工作姿态">恢复默认姿态</button>
         </div>
       </div>
+      <section class="force-summary" id="forceSummary" aria-label="当前姿态挖掘力" hidden>
+        <div class="force-summary-title">当前姿态挖掘力</div>
+        <div class="force-results">
+          <div class="force-result"><span>铲斗收斗</span><strong><span id="forceBucketValue">—</span> kN</strong><small>油缸缩回</small></div>
+          <div class="force-result"><span>斗杆内收</span><strong><span id="forceArmValue">—</span> kN</strong><small>油缸伸出</small></div>
+        </div>
+        <div class="force-summary-note">当前姿态斗齿尖的单动作理论切向挖掘力。液压参数默认值仅供演示，请按真机资料填写；未计入自重、地面条件、泵流量限制、稳定性和结构约束，不作为实际作业能力或安全限值。</div>
+      </section>
       <div class="table-wrap" id="tableWrap" hidden></div>
       <div class="perf" id="perf"></div>
     </section>
@@ -119,6 +127,6 @@
   <p style="padding:24px;font-size:14px">本工具需要启用 JavaScript 才能实时计算并绘制作业范围图。</p>
 </noscript>
 
-<script type="module" src="assets/ui/app.js?v=20261005a"></script>
+<script type="module" src="assets/ui/app.js?v=20261005b"></script>
 </body>
 </html>

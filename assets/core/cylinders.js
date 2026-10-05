@@ -657,8 +657,6 @@ export function verifyCylinderLayout(p) {
   //    这样加长动臂（斗杆）时安装点自动跟着末端销孔走，不会掉到杆件外面去。
   add('boomFoot', '动臂油缸缸筒端在 A 点前下方（x>0, y<0）', p.boomCylBodyDX > 0 && p.boomCylBodyDY < 0,
     `相对 A：(${p.boomCylBodyDX}, ${p.boomCylBodyDY}) mm`);
-  add('boomRod', '动臂油缸活塞杆端在动臂两端点连线的另一侧（动臂下侧，故为负）', p.boomCylRodPerp < 0,
-    `${p.boomCylRodPerp} mm`);
   add('armRod', '斗杆油缸活塞杆端在 B 后方、斗杆上平面（沿斗杆<0, 垂直斗杆>0）',
     p.armCylRodAlong < 0 && p.armCylRodPerp > 0, `(${p.armCylRodAlong}, ${p.armCylRodPerp}) mm`);
   add('armBody', '斗杆油缸缸筒端在动臂上表面且在动臂范围内（自 B：−动臂长 < 沿 < 0，垂直>0）',

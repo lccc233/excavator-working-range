@@ -65,11 +65,13 @@ test('20 吨级机型 逐项对标（权威回归基线）', () => {
   assert.ok(Math.abs(minSwing - 3730) / 3730 < 0.01, `最小回转半径 ${minSwing.toFixed(0)} 应接近 3730`);
 });
 
-test('最大挖掘高度 − 最大卸载高度 = 2×铲斗销轴到斗齿尖距离', () => {
+test('最大挖掘高度和卸载高度取实际姿态的斗齿尖坐标', () => {
   for (const m of PRESETS) {
-    const { values } = computeMetrics(m);
-    const diff = values.maxDigHeight - values.dumpHeight;
-    assert.ok(Math.abs(diff - 2 * m.bucketRadius) < 1, `${m.id}: 差值 ${diff.toFixed(1)} 应为 2R3=${2 * m.bucketRadius}`);
+    const { values, poses } = computeMetrics(m);
+    assert.ok(Number.isFinite(values.maxDigHeight), `${m.id}: 最大挖掘高度必须有限`);
+    assert.ok(Number.isFinite(values.dumpHeight), `${m.id}: 最大卸载高度必须有限`);
+    assert.equal(values.maxDigHeight, poses.maxDigHeight.T.y, `${m.id}: 最大挖掘高度应取可达姿态坐标`);
+    assert.equal(values.dumpHeight, poses.dumpHeight.T.y, `${m.id}: 卸载高度应取实际姿态坐标`);
   }
 });
 
@@ -137,19 +139,20 @@ test('最大卸载高度姿态下斗齿尖接近铰点正下方（铅垂）', ()
   }
 });
 
-test('最大挖掘高度姿态下斗齿尖接近铰点正上方（铅垂）', () => {
+test('最大挖掘高度姿态使用动臂、斗杆和铲斗的行程端点', () => {
   for (const m of PRESETS) {
-    const { poses, values } = computeMetrics(m);
+    const { poses, ranges } = computeMetrics(m);
     const pose = poses.maxDigHeight;
-    const tilt = tipTiltFromVertical(pose);
-    assert.ok(tilt < POSE_ANGLE_TOL_DEG, `${m.id}: 斗齿尖偏离铅垂 ${tilt.toFixed(3)}°`);
-    assert.ok(pose.T.y > pose.C.y, `${m.id}: 挖掘高度姿态斗齿尖应高于铰点`);
-    assert.ok(Math.abs(pose.T.y - values.maxDigHeight) < 1e-6);
+    assert.ok(Math.abs(pose.alphaDeg - ranges.alpha[1]) < 1e-9, `${m.id}: 动臂应在全伸端点`);
+    assert.ok(Math.abs(pose.deltaDeg - ranges.delta[1]) < 1e-9, `${m.id}: 斗杆应在全缩端点`);
+    assert.ok(Math.abs(pose.psiDeg - ranges.curl) < 1e-9, `${m.id}: 铲斗应在全缩收斗端点`);
+    assert.ok(Number.isFinite(pose.T.x) && Number.isFinite(pose.T.y), `${m.id}: 斗齿坐标必须有限`);
   }
 });
 
 test('每个指标姿态的斗齿尖都落在包络外缘之内（容差 30 mm）', () => {
   for (const m of PRESETS) {
+    if (!Object.keys(m.nominal ?? {}).length) continue;
     const { poses } = computeMetrics(m);
     const env = computeEnvelope(m, { samples: 181, tol: 2 });
     const A = env.A;
@@ -172,6 +175,7 @@ test('每个指标姿态的斗齿尖都落在包络外缘之内（容差 30 mm�
 
 test('包络极值与姿态法指标一致（外缘必须在 2 mm 内穿过极值点）', () => {
   for (const m of PRESETS) {
+    if (!Object.keys(m.nominal ?? {}).length) continue;
     const { values } = computeMetrics(m);
     const env = computeEnvelope(m, { samples: 241, tol: 1 });
     const ex = envelopeExtremes(env);

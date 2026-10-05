@@ -7,7 +7,7 @@
  * 既用于页面下方的"参数表"页签，也用于打印 PDF 的第二页。
  */
 
-import { PARAM_SPEC, PARAM_GROUPS, bucketRotationRange, jointRanges } from '../core/params.js';
+import { PARAM_SPEC, PARAM_GROUPS, bucketRotationRange, jointRanges } from '../core/params.js?v=20261005b';
 import { boomCylBodyPoint, armRodPerpSpan, verifyCylinderLayout } from '../core/cylinders.js';
 import { METRIC_META } from '../core/metrics.js';
 

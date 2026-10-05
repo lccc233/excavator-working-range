@@ -91,13 +91,33 @@ export function schematicModel(p, pose) {
   }
 
   const armAxis = mid(J.B, J.C);
+  const boomAxis = sub(J.B, J.A);
+  const boomPinSide = (point) => {
+    const v = sub(point, J.A);
+    return boomAxis.x * v.y - boomAxis.y * v.x;
+  };
+  const bodySide = boomPinSide(J.armBody);
+  const rodSide = boomPinSide(J.boomRod);
+  let boomPts;
+  if (bodySide * rodSide > 0) {
+    // 两个安装销都在动臂同一侧时，按沿动臂方向排序，避免轮廓边交叉。
+    const along = (point) => {
+      const v = sub(point, J.A);
+      return (v.x * boomAxis.x + v.y * boomAxis.y) / (boomAxis.x ** 2 + boomAxis.y ** 2);
+    };
+    const pins = [J.armBody, J.boomRod].sort((a, b) => along(a) - along(b));
+    boomPts = [J.A, ...pins, J.B];
+  } else {
+    // 两个安装销在动臂异侧时，按各自所在的一侧闭合轮廓。
+    boomPts = [J.A, J.armBody, J.B, J.boomRod];
+  }
 
   const links = [
     // 机架：动臂根部 A 与动臂油缸缸筒端在同一块机架上（一体），
     // 用直角边平行坐标轴的直角三角形表示，直角顶点取在「与 A 同一竖线、与缸筒端同一水平线」处
     { id: 'frame', label: '机架（动臂根部 + 动臂油缸缸筒端）', kind: 'frame', pts: frameTrianglePts(J.A, J.boomBody) },
     // 动臂：铰点 A、斗杆油缸缸筒端、斗杆铰点 B、动臂油缸活塞杆端 连成的多边形
-    { id: 'boom', label: '动臂', kind: 'rigid', pts: [J.A, J.armBody, J.B, J.boomRod] },
+    { id: 'boom', label: '动臂', kind: 'rigid', pts: boomPts },
     // 斗杆：铰点 B、斗杆油缸活塞杆端、铲斗油缸缸筒端、摇杆铰点 D、铲斗铰点 C
     { id: 'arm', label: '斗杆', kind: 'rigid', pts: [J.B, J.armRod, J.bktBody, J.D, J.C] },
     // 铲斗是「三铰点构件」：斗杆铰点 C、连杆铰点 E、斗齿尖 T，简图上就是一个三角形

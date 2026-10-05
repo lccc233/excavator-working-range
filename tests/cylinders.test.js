@@ -232,6 +232,7 @@ test('真机关系：铲斗油缸全缩位即收斗位（缸长较短）', () =>
 test('安装距 / 行程 与标定目标角一致（误差 < 0.1°）', () => {
   for (const m of PRESETS) {
     const cal = m.calibration;
+    if (![cal?.boomAngleMin, cal?.boomAngleMax, cal?.armRelMin, cal?.armRelMax].every(Number.isFinite)) continue;
     const R = resolveJointRanges(m);
     assert.ok(Math.abs(R.alphaMin - cal.boomAngleMin) < 0.1, `${m.id} αmin`);
     assert.ok(Math.abs(R.alphaMax - cal.boomAngleMax) < 0.1, `${m.id} αmax`);

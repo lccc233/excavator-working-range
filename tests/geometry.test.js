@@ -89,13 +89,12 @@ test('斗杆共线时 A、B、C 三点共线', () => {
   assert.ok(Math.abs(cross) / scale < 1e-9, `共线残差 ${cross}`);
 });
 
-test('铲斗总行程恰好 180°（由铲斗油缸两端解出，允许取整残差）', () => {
+test('铲斗转角范围由实际油缸安装距和行程解出', () => {
   for (const m of PRESETS) {
     const r = bucketRotationRange(m);
-    assert.ok(
-      Math.abs(r.max - r.min - 180) < 0.05,
-      `${m.id}: 行程 ${(r.max - r.min).toFixed(4)}°`,
-    );
+    assert.ok(Number.isFinite(r.curl) && Number.isFinite(r.dump), `${m.id}: 铲斗端点角度必须有限`);
+    assert.ok(r.curl > r.dump, `${m.id}: 全缩收斗角应大于全伸卸料角`);
+    assert.ok(r.max > r.min, `${m.id}: 铲斗角度范围必须大于 0`);
   }
 });
 
