@@ -1,31 +1,30 @@
 /**
- * 作业范围包络（八段圆弧作图法）
+ * 作业范围包络（九段圆弧作图法）
  * ==========================================================================
  *
- * 包络不是「斗齿尖可达域的边界」，而是按下面这套作图法画出来的**闭合轮廓**：
+ * 包络按下面这套单缸作图法生成闭合轮廓：
  * 起始姿态定好之后，每次只动一个油缸、其余两个保持不动，齿尖就画出一段圆弧；
- * 八段首尾相接，正好绕回起点。
+ * 九段首尾相接，绕回起点。
  *
  *   起点：动臂油缸最长（α = αmax）、斗杆油缸最短（Δ = Δmax）、铲斗油缸最短（ψ = ψmax）
  *
  *   ① 顺时针转铲斗（伸出铲斗缸，动臂/斗杆不动）→ 至 A、C、T 共线（齿尖在 C 外侧）
  *   ② 顺时针转动臂（收回动臂缸）→ 至动臂缸最短（α = αmin）
- *   ③ 顺时针转斗杆（伸出斗杆缸）→ 至斗杆缸最长（Δ = Δmin）
- *   ④ 顺时针转铲斗（伸出铲斗缸）→ 至 A、T、C 共线（齿尖转到朝 A 的一侧）
- *   ⑤ 逆时针转动臂（伸出动臂缸）→ 至动臂缸最长（α = αmax）
- *   ⑥ 顺时针转铲斗（伸出铲斗缸）→ 至铲斗缸最长（ψ = ψmin）
- *   ⑦ 逆时针转斗杆（收回斗杆缸）→ 至斗杆缸最短（Δ = Δmax）
- *   ⑧ 逆时针转铲斗（收回铲斗缸）→ 至铲斗缸最短（ψ = ψmax），回到起点
+ *   ③ 顺时针转铲斗（伸出铲斗缸，动臂/斗杆不动）→ 至 B、C、T 共线（齿尖在 C 外侧，ψ = 0）
+ *   ④ 顺时针转斗杆（伸出斗杆缸，保持③末的铲斗角）→ 至斗杆缸最长（Δ = Δmin）
+ *   ⑤ 顺时针转铲斗（伸出铲斗缸）→ 至 A、T、C 共线（齿尖转到朝 A 的一侧）
+ *   ⑥ 逆时针转动臂（伸出动臂缸）→ 至动臂缸最长（α = αmax）
+ *   ⑦ 顺时针转铲斗（伸出铲斗缸）→ 至铲斗缸最长（ψ = ψmin）
+ *   ⑧ 逆时针转斗杆（收回斗杆缸）→ 至斗杆缸最短（Δ = Δmax）
+ *   ⑨ 逆时针转铲斗（收回铲斗缸）→ 至铲斗缸最短（ψ = ψmax），回到起点
  *
- * 其中 A = 动臂根部铰点、C = 斗杆末端（铲斗）铰点、T = 铲斗齿尖。
- * ①②段给出最大挖掘半径圆弧，③④段给到最大挖掘深度，⑥⑦段把齿尖从机身前方收回来，
- * ⑧段回到最大挖掘高度——四个标称尺寸就落在这条线上。
+ * 其中 A = 动臂根部铰点、B = 动臂–斗杆铰点、C = 斗杆末端（铲斗）铰点、T = 铲斗齿尖。
+ * ①②段给出外伸半径圆弧；③先把齿尖对齐斗杆，④才以 B–C–T 的最长半径绕 B 转动，
+ * 补上原作图法在低位斗杆扫掠时漏掉的外侧区域；⑤继续向内收斗，⑨回到起点。
  *
- * 与厂家样本图逐点叠合验证过：整条轮廓（含伸到机身下方的那一段）与样本图上的细线重合。
- *
- * 说明：这条闭合线是**作业范围**（极值包络），不是「斗齿尖严格可达域」——后者在
- * 42°~44.5° 方向上会被铲斗行程切成三段，中间空一块够不到的地方。样本图和这里都按
- * 作图法画极值包络，不画那块空当。
+ * 共线目标受油缸行程限制，③只在顺时针可达区间内转动；目标不可达时截在行程端点，
+ * 已经过了目标时保持原姿态（保留零长度段）。闭合填充仍是作图轮廓，并不表示内部每点
+ * 都可达，也不承诺任意自定义机构参数下都是严格可达域边界。
  */
 
 import { solvePose, toDeg, toRad, RAD, bucketLocalShape } from './geometry.js';
@@ -135,7 +134,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * @param {number} [opts.stepDeg=0.75] 圆弧采样角步距（度）
  * @param {number} [opts.tol=1]        Douglas–Peucker 简化容差 (mm)
  * @returns {{A:{x,y}, outer:Array<{x,y}>, region:Array<{x,y}>, segments:Array, bounds:object, sampling:object}}
- *          outer / region 都是同一条闭合折线（首尾相接，不含重复末点）
+ *          outer / region 都是同一条闭合折线（保留与首点重合的闭合终点）
  */
 export function computeEnvelope(p, opts = {}) {
   const r = jointRanges(p);
@@ -171,22 +170,26 @@ export function computeEnvelope(p, opts = {}) {
       which: which === 'a' ? 'boom' : which === 'd' ? 'arm' : 'bucket',
       from: +from.toFixed(3), // 该段参数的起值（度）
       to: +to.toFixed(3), // 该段参数的终值（度）
-      ptFrom: i0, // 在 outer 点列中的起止序号
+      ptFrom: i0, // 在简化前点列中的新增点起止序号；零长度段可无新增点
       ptTo: pts.length - 1,
     });
   };
 
   const psi1 = clamp(alignPsi(p, A, aMax, dMax, true), pMin, pMax); // ①末：A–C–T 共线
-  const psi2 = clamp(alignPsi(p, A, aMin, dMin, false), pMin, pMax); // ④末：A–T–C 共线
+  // B→C 和 C→T 的绝对角分别为 α+Δ 与 α+Δ+ψ，外侧共线要求 ψ = 0。
+  // 不能取 ψ = 180（那是向 B 收回），也不能越过缸长约束或逆转去追零角。
+  const psiArm = clamp(0, pMin, psi1); // ③末：B–C–T 共线；不可达时退化到顺时针可达端点
+  const psi2 = clamp(alignPsi(p, A, aMin, dMin, false), pMin, pMax); // ⑤末：A–T–C 共线
 
   arc('p', pMax, psi1, aMax, dMax, 0); // ① 齿尖从最大挖掘高度转到 A–C–T 共线
   arc('a', aMax, aMin, 0, dMax, psi1); // ② 动臂缸收到底 → 最大挖掘半径圆弧
-  arc('d', dMax, dMin, aMin, 0, psi1); // ③ 斗杆缸伸到头
-  arc('p', psi1, psi2, aMin, dMin, 0); // ④ 齿尖自外向内扫过 → 最大挖掘深度
-  arc('a', aMin, aMax, 0, dMin, psi2); // ⑤ 动臂抬到最高
-  arc('p', psi2, pMin, aMax, dMin, 0); // ⑥ 铲斗缸伸到头（卸料位）
-  arc('d', dMin, dMax, aMax, 0, pMin); // ⑦ 斗杆缸收到底
-  arc('p', pMin, pMax, aMax, dMax, 0); // ⑧ 铲斗缸收到底 → 回到起点
+  arc('p', psi1, psiArm, aMin, dMax, 0); // ③ 顺时针对齐 B–C–T，保持动臂/斗杆不动
+  arc('d', dMax, dMin, aMin, 0, psiArm); // ④ 以③末为起点，斗杆缸伸到头
+  arc('p', psiArm, psi2, aMin, dMin, 0); // ⑤ 继承④末铲斗角，齿尖自外向内扫过
+  arc('a', aMin, aMax, 0, dMin, psi2); // ⑥ 动臂抬到最高
+  arc('p', psi2, pMin, aMax, dMin, 0); // ⑦ 铲斗缸伸到头（卸料位）
+  arc('d', dMin, dMax, aMax, 0, pMin); // ⑧ 斗杆缸收到底
+  arc('p', pMin, pMax, aMax, dMax, 0); // ⑨ 铲斗缸收到底 → 回到起点
 
   const closed = pts.length > 2 && Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1e-6;
   const outer = simplify(pts, tol);

@@ -24,6 +24,7 @@
 import { PRESETS, clonePreset, getPreset } from '../assets/core/presets.js';
 import { computeMetrics, METRIC_KEYS } from '../assets/core/metrics.js';
 import { computeEnvelope, computeMinSwingRadius, envelopeExtremes } from '../assets/core/envelope.js';
+import { solvePose } from '../assets/core/geometry.js';
 import { validateParams, PARAM_SPEC } from '../assets/core/params.js';
 import { armCylLength, armDeltaFromLength, armRodPerpInBoom, armRodPerpSpan, bucketCylLength, resolveJointRanges, boomCylBodyPoint, boomCylLength, cylinderPose, verifyCylinderLayout } from '../assets/core/cylinders.js';
 import { encodeParams, decodeParams, buildShareUrl, matchPreset } from '../assets/core/share.js';
@@ -92,29 +93,47 @@ async function main() {
   check('20 吨级机型 最大卸载高度 = 6700', Math.abs(values.dumpHeight - 6700) < 34, values.dumpHeight.toFixed(0));
 
   /* ---------------- 2. 包络 ---------------- */
-  section('包络求解（八段圆弧作图法）');
+  section('包络求解（九段圆弧作图法）');
   const env = computeEnvelope(sy);
   const ex = envelopeExtremes(env);
   check('包络闭合', env.closed === true, env.closed ? '首尾相接' : '未闭合');
-  check('八段圆弧依次相接', env.segments.length === 8 && env.segments.every((s, i) => i === 0 || s.ptFrom === env.segments[i - 1].ptTo + 1), `${env.segments.length} 段`);
+  check('九段圆弧依次相接', env.segments.length === 9 && env.segments.every((s, i) => i === 0 || s.ptFrom === env.segments[i - 1].ptTo + 1), `${env.segments.length} 段`);
   check('包络点数合理', env.outer.length > 40 && env.outer.length < 2000, `${env.outer.length} 点`);
   check('包络极值 = 最大挖掘高度 (2mm)', Math.abs(ex.maxY - values.maxDigHeight) < 2, `Δ=${(ex.maxY - values.maxDigHeight).toFixed(2)} mm`);
   check('包络极值 = 最大挖掘深度 (2mm)', Math.abs(ex.maxDepth - values.maxDigDepth) < 2, `Δ=${(ex.maxDepth - values.maxDigDepth).toFixed(2)} mm`);
   check('包络极值 = 最大挖掘半径 (2mm)', Math.abs(ex.maxX - values.maxDigRadius) < 2, `Δ=${(ex.maxX - values.maxDigRadius).toFixed(2)} mm`);
   {
-    // ① 末 A–C–T 共线、④ 末 A–T–C 共线：用两段端点算出的齿尖半径核对
-    const rr = resolveJointRanges(sy);
-    const AA = { x: sy.pivotX, y: sy.pivotY };
-    const poseOf = (alpha, delta, psi) => {
-      const a = alpha * Math.PI / 180, g = (alpha + delta) * Math.PI / 180, t = (alpha + delta + psi) * Math.PI / 180;
-      const B = { x: AA.x + sy.boomLength * Math.cos(a), y: AA.y + sy.boomLength * Math.sin(a) };
-      const C = { x: B.x + sy.armLength * Math.cos(g), y: B.y + sy.armLength * Math.sin(g) };
-      return { C, T: { x: C.x + sy.bucketRadius * Math.cos(t), y: C.y + sy.bucketRadius * Math.sin(t) } };
-    };
-    const d1 = (() => { const q = poseOf(rr.alphaMax, rr.deltaMax, env.segments[0].to); return Math.hypot(q.T.x - AA.x, q.T.y - AA.y) - (Math.hypot(q.C.x - AA.x, q.C.y - AA.y) + sy.bucketRadius); })();
-    const d4 = (() => { const q = poseOf(rr.alphaMin, rr.deltaMin, env.segments[3].to); return Math.hypot(q.T.x - AA.x, q.T.y - AA.y) - Math.abs(Math.hypot(q.C.x - AA.x, q.C.y - AA.y) - sy.bucketRadius); })();
-    check('① 末 A–C–T 共线', Math.abs(d1) < 1, `Δ=${d1.toFixed(2)} mm`);
-    check('④ 末 A–T–C 共线', Math.abs(d4) < 1, `Δ=${d4.toFixed(2)} mm`);
+    const types = ['bucket', 'boom', 'bucket', 'arm', 'bucket', 'boom', 'bucket', 'arm', 'bucket'];
+    for (const m of PRESETS) {
+      const rr = resolveJointRanges(m);
+      const raw = computeEnvelope(m, { tol: 0 });
+      check(`${m.id} 九段缸次序正确`, raw.segments.map((s) => s.which).join(',') === types.join(','));
+      const p1 = solvePose(m, rr.alphaMax, rr.deltaMax, raw.segments[0].to);
+      const d1 = Math.hypot(p1.T.x - p1.A.x, p1.T.y - p1.A.y)
+        - (Math.hypot(p1.C.x - p1.A.x, p1.C.y - p1.A.y) + m.bucketRadius);
+      check(`${m.id} ① 末 A–C–T 共线`, Math.abs(d1) < 1, `Δ=${d1.toFixed(2)} mm`);
+      const p3 = solvePose(m, rr.alphaMin, rr.deltaMax, 0);
+      const endpoint = raw.outer[raw.segments[2].ptTo];
+      const d3 = Math.hypot(endpoint.x - p3.T.x, endpoint.y - p3.T.y);
+      check(`${m.id} 新③ 末 B–C–T 共线且齿尖在 C 外侧`, d3 < 1e-6, `端点误差 ${d3.toFixed(6)} mm`);
+      check(`${m.id} 新③ 顺时针转铲斗`, raw.segments[2].from > raw.segments[2].to && raw.segments[2].to === 0);
+      const sweep = raw.segments[3];
+      let maxError = 0;
+      for (let i = sweep.ptFrom - 1; i <= sweep.ptTo; i++) {
+        maxError = Math.max(maxError, Math.abs(Math.hypot(raw.outer[i].x - p3.B.x, raw.outer[i].y - p3.B.y) - m.armLength - m.bucketRadius));
+      }
+      check(`${m.id} 新④ 从 B–C–T 共线姿态连续描绘最大外伸圆弧`, maxError < 1e-6, `R=${m.armLength + m.bucketRadius} mm，误差 ${maxError.toFixed(6)} mm`);
+      const p5 = solvePose(m, rr.alphaMin, rr.deltaMin, raw.segments[4].to);
+      const d5 = Math.hypot(p5.T.x - p5.A.x, p5.T.y - p5.A.y)
+        - Math.abs(Math.hypot(p5.C.x - p5.A.x, p5.C.y - p5.A.y) - m.bucketRadius);
+      check(`${m.id} 新⑤ 末 A–T–C 共线`, Math.abs(d5) < 1, `Δ=${d5.toFixed(2)} mm`);
+      if (m.id === 'E215HC4488A06A0') {
+        const expected = m.armLength + m.bucketRadius - p3.B.y;
+        const depth = envelopeExtremes(raw).maxDepth;
+        check('E215 包络达到约 6296 mm 的实际可达最深点', Math.abs(expected - 6296) < 1 && Math.abs(depth - expected) < 1,
+          `${depth.toFixed(3)} mm，解析解 ${expected.toFixed(3)} mm`);
+      }
+    }
   }
   check('动臂油缸活塞杆端取负值（在动臂两端点连线另一侧）', sy.boomCylRodPerp < 0, `${sy.boomCylRodPerp} mm`);
   {

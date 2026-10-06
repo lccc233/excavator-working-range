@@ -372,7 +372,7 @@ export function renderChart(o) {
 
   /* ---- 作业范围包络 ---- */
   if (view.showEnvelope) {
-    // 八段圆弧作图法得到的闭合轮廓：一段一段地画（每段颜色略作区分不需要，
+    // 九段圆弧作图法得到的闭合轮廓：一段一段地画（每段颜色略作区分不需要，
     // 但闭合路径必须一次成环，不能只用外缘 + Z，也不能拆成开口折线）。
     const ring = (env.region?.length > 3 ? env.region : env.outer).map((pt) => T(pt.x, pt.y));
     const d = `M ${ring.map((q) => `${n(q.x)} ${n(q.y)}`).join(' L ')} Z`;

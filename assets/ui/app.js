@@ -14,7 +14,7 @@ import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.
 import { validateParams } from '../core/params.js?v=20261005c';
 import { computeMetrics } from '../core/metrics.js?v=20261006a';
 import { computeDiggingForces } from '../core/forces.js?v=20261005c';
-import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261005c';
+import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261006b';
 import { decodeParams, encodeParams } from '../core/share.js?v=20261005c';
 // 本次改动的入口及依赖统一使用发版戳，避免旧缓存混用指标和油缸端点定义。
 import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261006a';

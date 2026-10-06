@@ -11,7 +11,7 @@
 
 ![当前 E215 界面：五项作业尺寸、最小回转半径和当前姿态挖掘力](docs/images/app-ui.jpg)
 
-当前计算与部署基线为 `d3854c6`（2026-10-06），并移除了工作装置无需共线的提示警告。示例图使用 `E215HC4488A06A0`。本版本保留五项作业尺寸及独立的最小回转半径，已移除最大垂直挖掘深度和斗底安装角。E215 参数按收到的尺寸资料录入，尚无厂家标称作业尺寸用于对标；20 吨级示例机型用于样本标定。
+当前计算版本为 2026-10-06 九段包络修复（入口及包络模块资源戳 `20261006b`），在原②与③之间补上铲斗顺时针转至 B–C–T 共线的动作。示例图使用 `E215HC4488A06A0`。本版本保留五项作业尺寸及独立的最小回转半径，已移除最大垂直挖掘深度和斗底安装角。E215 参数按收到的尺寸资料录入，尚无厂家标称作业尺寸用于对标；20 吨级示例机型用于样本标定。
 
 ---
 
@@ -55,7 +55,7 @@
 | 油缸反解关节角 | 关节角**不是输入项**。三根油缸各由「缸筒端 + 活塞杆端 + 安装距 + 行程」定出关节角范围，避免「油缸说一套、角度说另一套」 |
 | 标准四连杆铲斗 | 斗杆–摇杆–连杆–铲斗：摇杆与连杆都是两铰点杆，与铲斗油缸活塞杆共用一个销轴 P |
 | 五项作业尺寸 | 按各指标的定义姿态计算；行程受限时部分指标采用项目约定的可达姿态，并给出相关提示 |
-| 八段圆弧包络 | 按指定八步单缸运动逐段生成闭合轨迹；接点连续，不要求每处相切，见 [包络验证](docs/包络验证.md) |
+| 九段圆弧包络 | 动臂全缩后先转铲斗至 B–C–T 共线，再以该姿态转斗杆，补齐低位扫掠的外侧区域；见 [包络验证](docs/包络验证.md) |
 | 最小回转半径 | 铲斗朝向用「支撑函数 + 换顶点角」精确求解，动臂与斗杆角度使用 25×25 网格采样 |
 | 两种图面 | 实体外形（真机侧视）/ 机构运动简图（转动副画圆圈、移动副画油缸、构件画杆件） |
 | 工作姿态可调 | 直接拖三根油缸的长度（量程 = 安装距 ~ 安装距+行程），姿态随时可存进分享链接 |
@@ -76,7 +76,7 @@ node tools/serve.mjs              # → http://127.0.0.1:8080
 node tools/serve.mjs --port 5000  # 换端口
 node tools/serve.mjs --host 0.0.0.0   # 局域网内其它设备访问
 
-# 跑测试（159 项）
+# 跑测试（163 项）
 node tools/test.mjs
 ```
 
@@ -94,7 +94,7 @@ assets/core/              计算内核 —— 零 DOM，可在 Node 里直接单
   params.js               参数规范（48 项）、范围收敛、合法性校验、派生量
   metrics.js              五项作业尺寸 + 各自的定义姿态
   forces.js               当前姿态斗杆/铲斗理论切向挖掘力
-  envelope.js             八段圆弧包络 + 最小回转半径（铲斗朝向精确、其余角度采样）
+  envelope.js             九段圆弧包络 + 最小回转半径（铲斗朝向精确、其余角度采样）
   presets.js              机型预设（已标定的 20 吨级机型与 E215 尺寸资料）
   share.js                分享链接编解码（短键 + 只写差异字段）
 assets/ui/                浏览器界面层（DOM / SVG）
@@ -107,10 +107,10 @@ assets/ui/                浏览器界面层（DOM / SVG）
   app.js                  状态、交互、合帧渲染、URL 同步
   zoom.js                 图面缩放/平移（双指捏合、滚轮、双击；纯数学部分可在 Node 单测）
 assets/style.css          样式（含 @media print 打印排版与窄屏适配）
-tests/                    159 项 node 测试（11 个文件）
+tests/                    163 项 node 测试（11 个文件）
 tools/                    本地服务、测试入口、标定与反解工具
 deploy/                   阿里云 ECS + nginx 部署手册与打包脚本
-.verify/selftest.html     浏览器端自检页（当前 113 项检查，随代码入库维护）
+.verify/selftest.html     浏览器端自检页（当前 124 项检查，随代码入库维护）
 docs/                     技术文档（见下）
 ```
 
@@ -127,7 +127,7 @@ A  动臂根部铰点        B  动臂–斗杆铰点        C  斗杆–铲斗�
 B = A + L1·u(α)        C = B + L2·u(α+Δ)      T = C + R3·u(α+Δ+ψ)      u(t) = (cos t, sin t)
 
 关节角范围 ← 三根油缸：安装位置 + 安装距 + 行程  → 反解（扫单调区段 + 二分求根）
-作业范围包络 ← 八段圆弧作图法：每段只动一个关节，到规定终点，其余保持不动
+作业范围包络 ← 九段圆弧作图法：低位转斗杆前先使 B–C–T 共线；每段只动一个关节
 五项作业尺寸 ← 各自的定义姿态（不是取包络极值），自定义参数需核对行程提示
 最小回转半径 ← 铲斗朝向精确求解 + 动臂/斗杆角度网格采样
 铲斗外形 ← 「切掉一部分的半圆」：直边端点为齿尖 T，切除线与直边交点为铰点 C，
@@ -157,12 +157,12 @@ B = A + L1·u(α)        C = B + L2·u(α+Δ)      T = C + R3·u(α+Δ+ψ)      
 ## 测试与自检
 
 ```bash
-node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符串 + 参数表 + 分享 + 窄屏适配 + 缩放）
+node tools/test.mjs        # 163 项 node 测试（计算内核 + 渲染字符串 + 参数表 + 分享 + 窄屏适配 + 缩放）
 ```
 
 - **为什么不用 `node --test tests/`**：在受限沙箱里 `node --test` 会为每个测试文件 spawn 子进程并走管道收集输出，沙箱禁止命名管道会直接 `EPERM` 失败。`tools/test.mjs` 把全部测试文件 import 进同一个进程，绕开这个问题，也让 `npm test` 保持一条命令。
-- **浏览器端自检**：打开 `.verify/selftest.html`（当前 113 项检查，含渲染/导出/布局/数值），用于验证 node 里测不到的那一层。
-- **八步作图验证**：运行 `node tools/verify-envelope-sequence.mjs`，逐段检查两种预设的圆心、半径、运动方向、三缸长度、①④共线及首尾闭合。
+- **浏览器端自检**：打开 `.verify/selftest.html`（当前 124 项检查，含渲染/导出/布局/数值）。本次 123 项通过；唯一失败为既有的最小回转半径 `<30 ms` 时序阈值，旧版同环境也失败，详见 [开发与测试](docs/开发与测试.md)。
+- **九步作图验证**：运行 `node tools/verify-envelope-sequence.mjs`，逐段检查两种预设的圆心、半径、运动方向、三缸长度、①③⑤共线及首尾闭合，并确认④半径为斗杆长加齿尖半径。
 - **文档示例图**：运行 `node tools/gen-doc-figures.mjs`，由生产模型生成四张 SVG；界面截图另从真实页面保存。
 - **标定工具**：`tools/calibrate.mjs`（对样本指标）、`tools/fit-preset.mjs`（反解机型几何）、`tools/setup-cylinders.mjs`（按标定角反算油缸安装距/行程）。
 
@@ -190,8 +190,8 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 **Q：参数会被上传吗？图纸数据安全吗？**
 计算和调参在浏览器本地完成，不调用业务数据接口。页面加载时会请求静态资源；分享链接会**把参数编码在 URL 里**，链接接收者能读取这些参数，Web 服务器也可能记录请求 URL。
 
-**Q：E215 包络左侧和右下方为什么有折角？**
-这两处是第②→③、③→④段的接点，切线方向各改变约 14.7°。八步规定每次只动一根油缸，圆弧圆心依次在 A/B/C 之间切换，只要求首尾相接；折角符合该作图法。完整动作、缸长和验证方法见 [docs/包络验证.md](docs/包络验证.md)。
+**Q：E215 包络为什么改成九段？**
+原八段遗漏了动臂全缩后、斗杆转动前的铲斗对齐动作，低位斗杆圆弧的半径偏小。新增③使 B–C–T 共线，再由④保持该铲斗角转斗杆，圆弧半径从约 4329.8 mm 增至 4404 mm，高精度包络深度从约 6222.0 mm 修正至 6296.2 mm。原先将这一段的折角和深度缺口解释为正常，现已更正。完整动作、缸长和验证方法见 [docs/包络验证.md](docs/包络验证.md)。
 
 **Q：能改成命令行 / 桌面端 / 小程序吗？**
 可以。`assets/core/*` 是零 DOM 的纯函数模块，换掉 `assets/ui/` 这一层即可复用全部计算与测试。
@@ -202,8 +202,8 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 
 | 文档 | 内容 |
 |---|---|
-| [docs/模型与算法.md](docs/模型与算法.md) | 坐标系与符号、油缸反解、四连杆、八段圆弧、五项指标定义、回转半径求解、斗形作图法、挖掘力计算 |
-| [docs/包络验证.md](docs/包络验证.md) | 八步动作、E215 各段缸长、圆弧与共线验证、折角及尺寸口径 |
+| [docs/模型与算法.md](docs/模型与算法.md) | 坐标系与符号、油缸反解、四连杆、九段圆弧、五项指标定义、回转半径求解、斗形作图法、挖掘力计算 |
+| [docs/包络验证.md](docs/包络验证.md) | 九步动作、E215 各段缸长、圆弧与共线验证、漏段修复及尺寸口径 |
 | [docs/参数口径.md](docs/参数口径.md) | 48 项参数表（自动生成）、坐标基准、自检清单、常见坑 |
 | [docs/开发与测试.md](docs/开发与测试.md) | 目录职责、如何加参数/加机型、测试体系与自检页、性能基线、提交约定 |
 | [docs/部署与运维.md](docs/部署与运维.md) | 上线流程、服务器信息、回滚、缓存与配置漂移注意事项 |
@@ -214,7 +214,7 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 
 ## 贡献
 
-欢迎提 Issue 反馈机型数据或算法问题。提交 PR 前请保证 `node tools/test.mjs` 全绿（159 项）；改动计算内核时请说明**为什么**——这个项目的注释与文档都以「记录取舍理由」为目标。
+欢迎提 Issue 反馈机型数据或算法问题。提交 PR 前请保证 `node tools/test.mjs` 全绿（163 项）；改动计算内核时请说明**为什么**——这个项目的注释与文档都以「记录取舍理由」为目标。
 改动手机端 / 响应式相关代码时，除 node 测试外请再跑一次 `.verify/measure-mobile.mjs`（手机视口实测）与 `.verify/measure-print.mjs`（打印回归）。
 
 ---
@@ -231,6 +231,6 @@ node tools/test.mjs        # 159 项 node 测试（计算内核 + 渲染字符�
 
 A zero-dependency, build-free, backend-free web tool that draws the **working-range envelope** of a hydraulic backhoe excavator and computes its five standard working dimensions (max digging radius / ground-level digging radius / max digging height / dump height / max digging depth) plus the minimum swing radius.
 
-Inputs are **geometry** (boom / arm / bucket dimensions, pivot positions, cylinder mounts, installation lengths and strokes) — joint angles are *derived* by inverting the linkage. The eight-arc construction follows a prescribed sequence of single-cylinder movements; joins are continuous but need not be tangent. Bucket orientation is solved exactly for minimum swing radius, while boom and arm angles are sampled. The 20-tonne example reproduces four published working dimensions and the minimum swing radius within 0.1%. E215 uses supplied geometry and cylinder dimensions without a manufacturer working-range calibration.
+Inputs are **geometry** (boom / arm / bucket dimensions, pivot positions, cylinder mounts, installation lengths and strokes) — joint angles are *derived* by inverting the linkage. The nine-arc construction rotates the bucket into outward B–C–T alignment after lowering the boom, then sweeps the arm from that pose to recover the missing outer reach. It follows prescribed single-cylinder movements and does not certify the complete reachable set for arbitrary geometry. Bucket orientation is solved exactly for minimum swing radius, while boom and arm angles are sampled. The 20-tonne example reproduces four published working dimensions and the minimum swing radius within 0.1%. E215 uses supplied geometry and cylinder dimensions without a manufacturer working-range calibration.
 
 Run it with `node tools/serve.mjs`, test it with `node tools/test.mjs`.

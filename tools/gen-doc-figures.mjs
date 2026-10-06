@@ -46,7 +46,7 @@ body+=text(40,592,'C：铲斗铰点　　T：斗齿尖　　E：连杆–铲斗�
   text(40,627,'C–T 是保留的直边；C–E 是切除线；E 位于圆弧与切除线的交点。',16,'fill="#64748b"');
 await writeFile(new URL('bucket-shape.svg',dir),svg(1020,660,body,'E215 铲斗切半圆轮廓'));
 
-// Plot the exact sampled eight-arc sequence; no visual smoothing or curve fitting.
+// Plot the exact sampled nine-arc sequence; no visual smoothing or curve fitting.
 const raw=computeEnvelope(p,{stepDeg:.25,tol:0});
 const bounds=raw.bounds;
 const extent={minX:Math.min(-1000,bounds.minX)-500,maxX:bounds.maxX+500,minY:bounds.minY-500,maxY:bounds.maxY+500};
@@ -54,12 +54,12 @@ const s=Math.min(800/(extent.maxX-extent.minX),850/(extent.maxY-extent.minY));
 const ox=65+(800-(extent.maxX-extent.minX)*s)/2-extent.minX*s;
 const oy=125+(850-(extent.maxY-extent.minY)*s)/2+extent.maxY*s;
 const P=q=>({x:ox+q.x*s,y:oy-q.y*s});
-const colors=['#2563eb','#0284c7','#0d9488','#7c3aed','#db2777','#d97706','#65a30d','#475569'];
-const labels=['①','②','③','④','⑤','⑥','⑦','⑧'];
-const actions=['顺时针转铲斗 · 伸缸','顺时针转动臂 · 缩缸','顺时针转斗杆 · 伸缸','顺时针转铲斗 · 伸缸',
+const colors=['#2563eb','#0284c7','#f97316','#0d9488','#7c3aed','#db2777','#d97706','#65a30d','#475569'];
+const labels=['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
+const actions=['顺时针转铲斗 · 伸缸','顺时针转动臂 · 缩缸','顺时针转铲斗 · 伸缸','顺时针转斗杆 · 伸缸','顺时针转铲斗 · 伸缸',
   '逆时针转动臂 · 伸缸','顺时针转铲斗 · 伸缸','逆时针转斗杆 · 缩缸','逆时针转铲斗 · 缩缸'];
-const ends=['A–C–T 共线','动臂缸全缩','斗杆缸全伸','A–T–C 共线','动臂缸全伸','铲斗缸全伸','斗杆缸全缩','铲斗缸全缩，回到起点'];
-body=text(42,48,'E215：八段圆弧作图顺序',28,'font-weight="700"')+
+const ends=['A–C–T 共线','动臂缸全缩','B–C–T 共线（T 在 C 外侧）','斗杆缸全伸','A–T–C 共线','动臂缸全伸','铲斗缸全伸','斗杆缸全缩','铲斗缸全缩，回到起点'];
+body=text(42,48,'E215：九段圆弧作图顺序',28,'font-weight="700"')+
   text(42,87,'起始位置：动臂缸全伸，斗杆缸与铲斗缸全缩；每段只动一根油缸',18,'fill="#64748b"');
 for(let y=-6000;y<=10000;y+=2000) {
   body+=line(P({x:extent.minX,y}),P({x:extent.maxX,y}),'#edf1f6')+
@@ -71,7 +71,7 @@ for(let x=0;x<=10000;x+=2000) {
 }
 body+=line(P({x:extent.minX,y:0}),P({x:extent.maxX,y:0}),'#94a3b8',1.5)+
   text(58,1048,'坐标单位：m；圆弧编号按运动顺序排列',16,'fill="#64748b"');
-const offsets=[[54,-24],[42,0],[-48,28],[-58,18],[-55,-12],[-60,-8],[-42,-30],[55,-10]];
+const offsets=[[54,-24],[42,0],[60,30],[-48,28],[-58,18],[-55,-12],[-60,-8],[-42,-30],[55,-10]];
 raw.segments.forEach((seg,i)=>{
   const start=seg.ptFrom===0?0:seg.ptFrom-1;
   const pts=raw.outer.slice(start,seg.ptTo+1).map(P);
@@ -83,15 +83,15 @@ raw.segments.forEach((seg,i)=>{
   body+=`<polygon points="${[tip,left,right].map(q=>`${n(q.x)},${n(q.y)}`).join(' ')}" fill="${colors[i]}"/>`;
   const badge={x:mid.x+offsets[i][0],y:mid.y+offsets[i][1]};
   body+=line(mid,badge,colors[i],1)+dot(badge,colors[i],18)+text(badge.x,badge.y+7,labels[i],23,'text-anchor="middle" fill="white"');
-  const y=172+i*80;
+  const y=152+i*75;
   body+=text(937,y,labels[i],25,`fill="${colors[i]}" font-weight="700"`)+text(982,y,actions[i],19)+
     text(982,y+29,'终止：'+ends[i],17,'fill="#64748b"');
 });
 const first=P(raw.outer[0]);
 body+=dot(first,'#0f172a',5)+text(first.x-16,first.y-14,'起点 / 终点',15,'text-anchor="end"');
 body+=`<rect x="929" y="841" width="426" height="152" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>`+
-  text(949,875,'接点连续，并不要求所有接点相切',20,'font-weight="700"')+
-  text(949,910,'②→③ 与 ③→④ 各转向约 14.7°。',18)+
-  text(949,942,'折角符合这套八步动作规定。',18)+text(949,974,'圆弧直接取自当前计算模型。',16,'fill="#64748b"');
-await writeFile(new URL('envelope-eight-arcs.svg',dir),svg(1400,1100,body,'E215 八段圆弧作图顺序'));
-console.log('已生成 4 张模型示例：实体外形、机构简图、铲斗轮廓、八段圆弧。');
+  text(949,875,'③：先转铲斗至 B–C–T 共线',20,'font-weight="700"')+
+  text(949,910,'④：以③末姿态绕 B 转动斗杆。',18)+
+  text(949,942,'斗杆圆弧半径：2900 + 1504 = 4404 mm',17)+text(949,974,'圆弧直接取自当前计算模型。',16,'fill="#64748b"');
+await writeFile(new URL('envelope-nine-arcs.svg',dir),svg(1400,1100,body,'E215 九段圆弧作图顺序'));
+console.log('已生成 4 张模型示例：实体外形、机构简图、铲斗轮廓、九段圆弧。');
