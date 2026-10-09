@@ -20,7 +20,7 @@ import {
 } from '../assets/core/envelope.js';
 import { computeMetrics } from '../assets/core/metrics.js';
 import { jointRanges } from '../assets/core/params.js';
-import { solvePose } from '../assets/core/geometry.js';
+import { solvePose, bucketLocalShape, bucketPolygon, toRad } from '../assets/core/geometry.js';
 import * as arm from '../assets/core/cylinders.js';
 
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
@@ -400,6 +400,82 @@ test('最小回转半径采样网格收敛（25×25×5 与 41×41×9 一致）',
       `${m.id}: 粗网格 ${coarse.toFixed(1)} 与细网格 ${fine.toFixed(1)} 不一致`,
     );
   }
+});
+
+// 独立参考：枚举顶点投影的驻点和两顶点投影相等的方向，再实际旋转斗体。
+// 不使用生产代码的预计算支撑值或区间查询，验证优化没有改变 α×Δ 网格的结果。
+function referenceMinSwingRadius(p, samples) {
+  const shape = bucketLocalShape(p);
+  const r = jointRanges(p);
+  const period = 2 * Math.PI;
+  const candidates = [];
+  for (let i = 0; i < shape.length; i++) {
+    const [x, y] = shape[i];
+    const stationary = Math.atan2(-y, x);
+    candidates.push(stationary, stationary + Math.PI);
+    for (let j = i + 1; j < shape.length; j++) {
+      const dx = x - shape[j][0];
+      const dy = y - shape[j][1];
+      if (dx === 0 && dy === 0) continue;
+      const equalProjection = Math.atan2(-dy, dx) + Math.PI / 2;
+      candidates.push(equalProjection, equalProjection + Math.PI);
+    }
+  }
+  let best = Infinity;
+  for (let i = 0; i < samples; i++) {
+    const alpha = r.alpha[0] + (r.alpha[1] - r.alpha[0]) * i / Math.max(1, samples - 1);
+    for (let j = 0; j < samples; j++) {
+      const delta = r.delta[0] + (r.delta[1] - r.delta[0]) * j / Math.max(1, samples - 1);
+      const pose = solvePose(p, alpha, delta, r.psi[0]);
+      const lo = toRad(pose.bucketAbsDeg);
+      const hi = lo + toRad(r.psi[1] - r.psi[0]);
+      const frontAt = (theta) => Math.max(...bucketPolygon(pose.C, theta, p.bucketRadius, shape).map((pt) => pt.x));
+      let bucketFront = Math.min(frontAt(lo), frontAt(hi));
+      for (const angle of candidates) {
+        const theta = angle + Math.ceil((lo - angle) / period) * period;
+        if (theta <= hi + 1e-12) bucketFront = Math.min(bucketFront, frontAt(theta));
+      }
+      best = Math.min(best, Math.max(
+        pose.A.x + p.boomWidth / 2,
+        pose.B.x + p.boomWidth / 2,
+        Math.max(0, p.platformFront),
+        pose.C.x + p.armWidth / 2,
+        bucketFront,
+      ));
+    }
+  }
+  return best;
+}
+
+test('最小回转半径预计算与独立斗体旋转参考一致（单点、粗网格、默认网格）', () => {
+  for (const p of PRESETS) {
+    for (const samples of [1, 5, 25]) {
+      near(computeMinSwingRadius(p, { samples }), referenceMinSwingRadius(p, samples), `${p.id}: ${samples}×${samples} 网格`);
+    }
+  }
+});
+
+test('最小回转半径支持镜像斗形、跨周期朝向与受限铲斗行程', () => {
+  for (const base of PRESETS) {
+    const mirrored = { ...base };
+    for (const key of ['bktCylBodyPerp', 'bktBellPerp', 'bktEPerp', 'bktBranch']) mirrored[key] *= -1;
+    for (const p of [mirrored, { ...base, bktCylStroke: 300 }]) {
+      const r = jointRanges(p);
+      assert.ok(Object.values(r).flat().every(Number.isFinite), `${base.id}: 参考机构必须可解`);
+      near(computeMinSwingRadius(p, { samples: 7 }), referenceMinSwingRadius(p, 7), `${base.id}: 镜像或受限行程`);
+    }
+  }
+});
+
+test('最小回转半径就地修改斗形参数后不复用旧支撑值', () => {
+  const p = { ...PRESETS[0], bktCylStroke: 300 };
+  const initial = computeMinSwingRadius(p, { samples: 7 });
+  for (const [key, change] of [['bktEAlong', 20], ['bktEPerp', 20], ['bucketRadius', 100]]) {
+    p[key] += change;
+    assert.ok(Object.values(jointRanges(p)).flat().every(Number.isFinite));
+    near(computeMinSwingRadius(p, { samples: 7 }), referenceMinSwingRadius(p, 7), `改 ${key} 后的支撑值`);
+  }
+  assert.ok(Math.abs(initial - computeMinSwingRadius(p, { samples: 7 })) > 1, '斗形变化必须实际影响结果');
 });
 
 test('包络计算耗时满足实时要求（默认参数单次 < 20 ms）', () => {

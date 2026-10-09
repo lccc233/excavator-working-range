@@ -21,6 +21,7 @@
   "scripts": {
     "serve": "node tools/serve.mjs",
     "test": "node tools/test.mjs",
+    "bench": "node tools/benchmark.mjs",
     "calibrate": "node tools/calibrate.mjs",
     "docs:params": "node tools/gen-param-table.mjs",
     "verify:deploy": "node tools/verify-deploy.mjs"

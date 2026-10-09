@@ -534,6 +534,84 @@ async function main() {
     zoomHost.remove();
   }
 
+  /* ---------------- 应用事件接线 ---------------- */
+  section('应用交互与打印');
+  const frame = document.createElement('iframe');
+  // 保持在视口内但透明，避免浏览器暂停离屏 iframe 的动画帧。
+  frame.style.cssText = 'position:fixed;left:0;top:0;width:1000px;height:700px;opacity:0;pointer-events:none;border:0';
+  try {
+    await new Promise((resolve, reject) => {
+      frame.onload = resolve;
+      frame.onerror = () => reject(new Error('应用自检页面加载失败'));
+      frame.src = '../index.html';
+      document.body.appendChild(frame);
+    });
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    const nextFrame = () => new Promise((resolve) => win.requestAnimationFrame(resolve));
+    await nextFrame();
+    await nextFrame();
+    check('真实应用首次绘制出作业范围图', !!doc.querySelector('#chart svg'));
+
+    let printCalls = 0;
+    win.print = () => {
+      printCalls++;
+      if (printCalls === 1) win.dispatchEvent(new win.Event('beforeprint'));
+    };
+    win.dispatchEvent(new win.Event('beforeprint'));
+    await new Promise((resolve) => win.setTimeout(resolve, 100));
+    check('Ctrl+P 的 beforeprint 准备参数表', !!doc.querySelector('#printOnly table'));
+    check('beforeprint 不再次调用打印', printCalls === 0, `调用 ${printCalls} 次`);
+    printCalls = 0;
+    doc.getElementById('btnPdf').click();
+    await new Promise((resolve) => win.setTimeout(resolve, 100));
+    check('打印按钮只调用一次打印', printCalls === 1, `调用 ${printCalls} 次`);
+
+    const originalRaf = win.requestAnimationFrame.bind(win);
+    let scheduledFrames = 0;
+    win.requestAnimationFrame = (callback) => {
+      scheduledFrames++;
+      return originalRaf(callback);
+    };
+    const changeBoom = (value) => {
+      const input = doc.getElementById('f-boomLength');
+      input.value = String(value);
+      input.dispatchEvent(new win.Event('change', { bubbles: true }));
+    };
+    changeBoom(sy.boomLength + 100);
+    changeBoom(sy.boomLength + 200);
+    doc.getElementById('tabTable').click();
+    doc.getElementById('tabChart').click();
+    // 使用原始 rAF 等待，不把自检自身算进应用注册的帧数。
+    await new Promise((resolve) => originalRaf(resolve));
+    check('同帧多次参数修改与视图切换只注册一次绘制', scheduledFrames === 1, `注册 ${scheduledFrames} 帧`);
+    const expected = computeMetrics({ ...sy, boomLength: sy.boomLength + 200 }).values.groundMaxRadius;
+    check('视图切换不丢失待执行的参数计算', doc.querySelector('#chart svg').textContent.includes(Math.round(expected).toLocaleString('en-US')));
+    changeBoom(sy.boomLength);
+    await new Promise((resolve) => originalRaf(resolve));
+    const before = doc.getElementById('perf').textContent.split(' · 绘制')[0];
+    doc.getElementById('tabTable').click();
+    doc.getElementById('tabChart').click();
+    await new Promise((resolve) => originalRaf(resolve));
+    check('仅切换页签保留既有计算结果', doc.getElementById('perf').textContent.split(' · 绘制')[0] === before);
+
+    const validSvg = doc.querySelector('#chart svg').outerHTML;
+    const bucketInput = doc.getElementById('f-bktEPerp');
+    bucketInput.value = '535'; // 已知不能覆盖完整铲斗油缸行程的参数。
+    bucketInput.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await new Promise((resolve) => originalRaf(resolve));
+    check('参数无效时保留有效图、隐藏当前挖掘力并显示状态',
+      doc.querySelector('#chart svg').outerHTML === validSvg && doc.getElementById('forceSummary').hidden && doc.getElementById('perf').textContent.includes('参数无效'));
+    doc.getElementById('tabTable').click();
+    doc.getElementById('tabChart').click();
+    doc.getElementById('optEnvelope').click();
+    await new Promise((resolve) => originalRaf(resolve));
+    await new Promise((resolve) => originalRaf(resolve));
+    check('无效参数下切换视图仍保留最后一张有效图', doc.querySelector('#chart svg').outerHTML === validSvg);
+  } finally {
+    frame.remove();
+  }
+
   /* ---------------- 汇总 ---------------- */
   summary.textContent = fail === 0
     ? `✅ 全部通过：${pass} 项`

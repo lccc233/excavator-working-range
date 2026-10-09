@@ -14,7 +14,7 @@ import { PRESETS, clonePreset, defaultParams, getPreset } from '../core/presets.
 import { validateParams } from '../core/params.js?v=20261005c';
 import { computeMetrics } from '../core/metrics.js?v=20261006a';
 import { computeDiggingForces } from '../core/forces.js?v=20261005c';
-import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261006b';
+import { computeEnvelope, computeMinSwingRadius } from '../core/envelope.js?v=20261009a';
 import { decodeParams, encodeParams } from '../core/share.js?v=20261005c';
 // 本次改动的入口及依赖统一使用发版戳，避免旧缓存混用指标和油缸端点定义。
 import { renderChart, resolvePose, cylinderLengthRange, poseCylinderLengths } from './draw.js?v=20261006a';
@@ -169,6 +169,14 @@ function chartSvg(W, H) {
 }
 
 function renderChartNow() {
+  // 参数无效时视图切换和 ResizeObserver 仍会请求绘制，必须保留最后一张有效图。
+  if (!state.valid) {
+    state.pose = null;
+    syncForceSummary();
+    setPosePanelVisible();
+    el.perf.textContent = '参数无效，保留上一次结果';
+    return;
+  }
   const W = el.chart.clientWidth;
   const H = el.chart.clientHeight;
   if (W < 40 || H < 40) return;
@@ -268,13 +276,20 @@ function scheduleTableRender(ms = 160) {
   tableTimer = setTimeout(renderTableNow, ms);
 }
 
-function scheduleRender({ table = false, url = true } = {}) {
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(() => {
-    rafId = 0;
-    if (recompute()) renderChartNow();
-    else setPosePanelVisible();
-  });
+let calculationPending = false;
+
+function scheduleRender({ table = false, url = true, calculate = true } = {}) {
+  // 同一帧只注册一次回调；视图切换不能覆盖该帧尚未执行的参数重算。
+  calculationPending ||= calculate;
+  if (!rafId) {
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      const shouldCalculate = calculationPending;
+      calculationPending = false;
+      if (shouldCalculate) recompute();
+      renderChartNow();
+    });
+  }
 
   if (table) scheduleTableRender();
   if (url) {
@@ -400,7 +415,7 @@ function onExportSvg() {
   toast('SVG 已导出');
 }
 
-function onPrint() {
+function preparePrint() {
   // 打印前把参数表填进 print-only 区域（屏幕上不可见）
   if (state.valid) {
     const { sizeTable, geomTable, derivedTable, mountTable, layoutTable, poseTable } = renderSpecTables(
@@ -419,7 +434,11 @@ function onPrint() {
       layoutTable +
       poseTable;
   }
-  setTimeout(() => window.print(), 60);
+}
+
+function onPrint() {
+  preparePrint();
+  window.print();
 }
 
 async function onShare() {
@@ -447,7 +466,7 @@ function setTab(name) {
   $('tabTable').classList.toggle('primary', !isChart);
   setPosePanelVisible();
   if (!isChart) renderTableNow();
-  else scheduleRender({ table: false, url: false });
+  else scheduleRender({ table: false, url: false, calculate: false });
 }
 
 /* ------------------------------------------------------------------ *
@@ -512,7 +531,8 @@ function initTopbar() {
   $('btnPng').addEventListener('click', onExportPng);
   $('btnSvg').addEventListener('click', onExportSvg);
   $('btnPdf').addEventListener('click', onPrint);
-  window.addEventListener('beforeprint', onPrint);
+  // Ctrl+P 也要准备参数表；beforeprint 只准备内容，不能再调用 print()。
+  window.addEventListener('beforeprint', preparePrint);
 }
 
 function initResize() {

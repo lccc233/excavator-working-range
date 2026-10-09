@@ -54,8 +54,8 @@ function bucketProfile(shape) {
     for (let j = i + 1; j < shape.length; j++) {
       const dx = shape[i][0] - shape[j][0];
       const dy = shape[i][1] - shape[j][1];
-      if (Math.abs(dy) < 1e-12) continue; // 平行：没有交点
-      const base = Math.atan2(dx, dy); // tanθ = (lx_i−lx_j)/(ly_i−ly_j)
+      if (dx === 0 && dy === 0) continue; // 重合顶点不会切换支撑点
+      const base = Math.atan2(dx, dy); // dx·cosθ − dy·sinθ = 0；dy=0 时仍有交点
       cross.push(base, base + Math.PI);
     }
   }
@@ -63,6 +63,9 @@ function bucketProfile(shape) {
     flat,
     cross: cross.map((t) => ((t % TWO_PI) + TWO_PI) % TWO_PI).sort((a, b) => a - b),
   };
+  // 换顶点角上的前缘值只取决于斗形。每个 α×Δ 网格点都重扫全部顶点，
+  // 会把同一个值算数百次；按形状预计算后，区间查询只需比较这些数值。
+  prof.reaches = Float64Array.from(prof.cross, (theta) => bucketReachAt(prof, theta));
   profileCache.set(shape, prof);
   return prof;
 }
@@ -93,7 +96,8 @@ function bucketReachMin(prof, thetaLo, thetaHi) {
   const cross = prof.cross;
   const n = cross.length;
   if (!n) return best;
-  // 二分找到第一个 ≥ lo 的换顶点角，然后绕一圈（区间宽度 ≤ 2π）
+  // 二分找到第一个 ≥ lo 的换顶点角。跨 2π 时分成两个连续区间，
+  // 避免对每个候选角重复取模与换算到绝对角度。
   let a = 0;
   let b = n;
   while (a < b) {
@@ -101,13 +105,15 @@ function bucketReachMin(prof, thetaLo, thetaHi) {
     if (cross[mid] < lo) a = mid + 1;
     else b = mid;
   }
-  const start = a % n;
-  for (let k = 0; k < n; k++) {
-    const c = cross[(start + k) % n];
-    const th = thetaLo + (((c - lo) % TWO_PI) + TWO_PI) % TWO_PI;
-    if (th > thetaHi + 1e-12) break;
-    const v = bucketReachAt(prof, th);
-    if (v < best) best = v;
+  const hi = lo + (thetaHi - thetaLo) + 1e-12;
+  for (let k = a; k < n && cross[k] <= hi; k++) {
+    if (prof.reaches[k] < best) best = prof.reaches[k];
+  }
+  if (hi >= TWO_PI) {
+    const wrappedHi = hi - TWO_PI;
+    for (let k = 0; k < a && cross[k] <= wrappedHi; k++) {
+      if (prof.reaches[k] < best) best = prof.reaches[k];
+    }
   }
   return best;
 }
